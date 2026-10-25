@@ -269,6 +269,7 @@ namespace ECS {
         void ProcessCompletedLoads();
         void ProcessCompletedSaves();
         void ApplyLoadedVideo(LoadResult&& result);
+        void PrimeFirstFrame(EntityID entity, LoadResult&& result);
         void DropPendingLoadsFor(EntityID entity);
 
         void WorkerLoop(Track& track);

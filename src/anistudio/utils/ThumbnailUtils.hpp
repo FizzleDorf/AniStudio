@@ -1,3 +1,4 @@
+// ThumbnailUtils.hpp
 #pragma once
 
 #include <string>
@@ -31,6 +32,7 @@ namespace GUI {
 
         void RenderThumbnail(
             const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
+            ECS::EntityID entityID,
             size_t index,
             float thumbnailSize,
             DisplayMode mode,
@@ -45,6 +47,7 @@ namespace GUI {
         void EndListMode();
         void RenderListRow(
             const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
+            ECS::EntityID entityID,
             size_t index,
             float thumbnailSize,
             std::function<void(ECS::EntityID)> onSelect,

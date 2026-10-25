@@ -1,6 +1,7 @@
 #pragma once
 #include "Log.hpp"
 #include <queue>
+#include <deque>
 #include <functional>
 #include <unordered_map>
 #include <memory>
@@ -13,350 +14,325 @@
 #include "BaseComponent.hpp"
 
 namespace ECS {
-	class EntityManager {
 
-	public:
-		EntityManager();
-		~EntityManager();
+    class EntityManager {
 
-		void Update(const float deltaT);
-		void Reset();
-		const EntityID AddNewEntity();
-		void DestroyEntity(const EntityID entity);
-		bool IsEntityValid(EntityID entity) const;
+    public:
+        EntityManager();
+        ~EntityManager();
 
-		template<typename T, typename... Args>
-		T& AddComponent(const EntityID entity, Args &&...args) {
-			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			assert(entity != 0 && "Cannot add component to the null entity");
+        void Update(const float deltaT);
+        void Reset();
+        const EntityID AddNewEntity();
+        void DestroyEntity(const EntityID entity);
+        bool IsEntityValid(EntityID entity) const;
 
-			std::type_index typeIdx = std::type_index(typeid(T));
-			auto it = m_componentTypeToID.find(typeIdx);
+        uint64_t GetEntityGeneration(EntityID entity) const {
+            return entity < m_generations.size() ? m_generations[entity] : 0;
+        }
 
-			if (it == m_componentTypeToID.end()) {
-				std::string typeName = typeid(T).name();
-				ANI_LOG_ERROR("Component type '%s' not registered! Entity: %u",
-					typeName.c_str(), entity);
+        template<typename T, typename... Args>
+        T& AddComponent(const EntityID entity, Args &&...args) {
+            assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+            assert(entity != 0 && "Cannot add component to the null entity");
 
-				ANI_LOG_ERROR("Registered components:");
-				for (const auto& [name, id] : m_componentNameToID) {
-					ANI_LOG_ERROR("  - %s -> %u", name.c_str(), id);
-				}
+            std::type_index typeIdx = std::type_index(typeid(T));
+            auto it = m_componentTypeToID.find(typeIdx);
 
-				throw std::runtime_error("Component type not registered: " + typeName);
-			}
+            if (it == m_componentTypeToID.end()) {
+                std::string typeName = typeid(T).name();
+                ANI_LOG_ERROR("Component type '%s' not registered! Entity: %u",
+                    typeName.c_str(), entity);
+                throw std::runtime_error("Component type not registered: " + typeName);
+            }
 
-			ComponentTypeID compType = it->second;
-			T component(std::forward<Args>(args)...);
-			component.entityID = entity;
+            ComponentTypeID compType = it->second;
+            T component(std::forward<Args>(args)...);
+            component.entityID = entity;
 
-			GetEntitySignature(entity)->insert(compType);
-			GetCompList<T>()->Insert(component);
-			UpdateEntityTargetSystem(entity);
+            GetEntitySignature(entity)->insert(compType);
+            GetCompList<T>()->Insert(entity, component);
+            UpdateEntityTargetSystem(entity);
 
-			return GetCompList<T>()->Get(entity);
-		}
+            return GetCompList<T>()->Get(entity);
+        }
 
-		template<typename T>
-		void RemoveComponent(const EntityID entity) {
-			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+        template<typename T>
+        void RemoveComponent(const EntityID entity) {
+            assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+            std::type_index typeIdx = std::type_index(typeid(T));
+            auto it = m_componentTypeToID.find(typeIdx);
+            if (it == m_componentTypeToID.end()) return;
+            auto sigIt = entitiesSignatures.find(entity);
+            if (sigIt != entitiesSignatures.end()) {
+                sigIt->second->erase(it->second);
+                GetCompList<T>()->Erase(entity);
+                UpdateEntityTargetSystem(entity);
+            }
+        }
 
-			std::type_index typeIdx = std::type_index(typeid(T));
-			auto it = m_componentTypeToID.find(typeIdx);
-			if (it == m_componentTypeToID.end()) return;
+        template<typename T>
+        T& GetComponent(const EntityID entity) {
+            assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+            return GetCompList<T>()->Get(entity);
+        }
 
-			auto sigIt = entitiesSignatures.find(entity);
-			if (sigIt != entitiesSignatures.end()) {
-				sigIt->second->erase(it->second);
-				GetCompList<T>()->Erase(entity);
-				UpdateEntityTargetSystem(entity);
-			}
-		}
+        template<typename T>
+        const bool HasComponent(const EntityID entity) {
+            assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+            auto it = entitiesSignatures.find(entity);
+            if (it == entitiesSignatures.end()) return false;
+            std::type_index typeIdx = std::type_index(typeid(T));
+            auto compIt = m_componentTypeToID.find(typeIdx);
+            if (compIt == m_componentTypeToID.end()) return false;
+            const EntitySignature& signature = *(it->second);
+            return (signature.count(compIt->second) > 0);
+        }
 
-		template<typename T>
-		T& GetComponent(const EntityID entity) {
-			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			return GetCompList<T>()->Get(entity);
-		}
+        template <typename T>
+        void RegisterSystem() {
+            std::type_index typeIdx = std::type_index(typeid(T));
+            auto it = m_systemTypeToID.find(typeIdx);
+            SystemTypeID systemType;
+            if (it != m_systemTypeToID.end()) {
+                systemType = it->second;
+            }
+            else {
+                systemType = m_nextSystemID++;
+                m_systemTypeToID[typeIdx] = systemType;
+                m_systemIDToName[systemType] = typeid(T).name();
+            }
 
-		template<typename T>
-		const bool HasComponent(const EntityID entity) {
-			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+            assert(registeredSystems.count(systemType) == 0 && "System already registered!");
+            auto system = std::make_shared<T>(*this);
 
-			auto it = entitiesSignatures.find(entity);
-			if (it == entitiesSignatures.end()) {
-				return false;
-			}
+            for (const auto& entitySig : entitiesSignatures) {
+                if (IsEntityInSystem(entitySig.first, system->signature)) {
+                    system->entities.insert(entitySig.first);
+                }
+            }
 
-			std::type_index typeIdx = std::type_index(typeid(T));
-			auto compIt = m_componentTypeToID.find(typeIdx);
-			if (compIt == m_componentTypeToID.end()) {
-				return false;
-			}
+            system->Start();
+            registeredSystems[systemType] = std::move(system);
+            ANI_LOG_INFO("Registered system: %s with ID: %u", typeid(T).name(), systemType);
+        }
 
-			const EntitySignature& signature = *(it->second);
-			return (signature.count(compIt->second) > 0);
-		}
+        template<typename T>
+        void UnregisterSystem() {
+            std::type_index typeIdx = std::type_index(typeid(T));
+            auto it = m_systemTypeToID.find(typeIdx);
+            if (it != m_systemTypeToID.end()) {
+                auto sysIt = registeredSystems.find(it->second);
+                if (sysIt != registeredSystems.end()) {
+                    sysIt->second->Destroy();
+                    registeredSystems.erase(sysIt);
+                }
+            }
+            ANI_LOG_INFO("Unregistered system: %s", typeid(T).name());
+        }
 
-		template <typename T>
-		void RegisterSystem() {
-			std::type_index typeIdx = std::type_index(typeid(T));
+        template <typename T>
+        std::shared_ptr<T> GetSystem() {
+            std::type_index typeIdx = std::type_index(typeid(T));
+            auto it = m_systemTypeToID.find(typeIdx);
+            if (it != m_systemTypeToID.end()) {
+                auto sysIt = registeredSystems.find(it->second);
+                if (sysIt != registeredSystems.end()) {
+                    return std::static_pointer_cast<T>(sysIt->second);
+                }
+            }
+            return nullptr;
+        }
 
-			auto it = m_systemTypeToID.find(typeIdx);
-			SystemTypeID systemType;
-			if (it != m_systemTypeToID.end()) {
-				systemType = it->second;
-			}
-			else {
-				systemType = m_nextSystemID++;
-				m_systemTypeToID[typeIdx] = systemType;
-				m_systemIDToName[systemType] = typeid(T).name();
-			}
+        template<typename T>
+        ComponentTypeID RegisterComponent(const std::string& name) {
+            static_assert(std::is_base_of_v<BaseComponent, T>,
+                "ALL components must derive from BaseComponent");
 
-			assert(registeredSystems.count(systemType) == 0 && "System already registered!");
-			auto system = std::make_shared<T>(*this);
+            std::type_index typeIdx = std::type_index(typeid(T));
 
-			for (const auto& entitySig : entitiesSignatures) {
-				if (IsEntityInSystem(entitySig.first, system->signature)) {
-					system->entities.insert(entitySig.first);
-				}
-			}
+            auto typeIt = m_componentTypeToID.find(typeIdx);
+            if (typeIt != m_componentTypeToID.end()) return typeIt->second;
 
-			system->Start();
-			registeredSystems[systemType] = std::move(system);
-			ANI_LOG_INFO("Registered system: %s with ID: %u", typeid(T).name(), systemType);
-		}
+            auto nameIt = m_componentNameToID.find(name);
+            if (nameIt != m_componentNameToID.end()) {
+                ComponentTypeID typeId = nameIt->second;
+                m_componentTypeToID[typeIdx] = typeId;
+                return typeId;
+            }
 
-		template<typename T>
-		void UnregisterSystem() {
-			std::type_index typeIdx = std::type_index(typeid(T));
-			auto it = m_systemTypeToID.find(typeIdx);
-			if (it != m_systemTypeToID.end()) {
-				auto sysIt = registeredSystems.find(it->second);
-				if (sysIt != registeredSystems.end()) {
-					sysIt->second->Destroy();
-					registeredSystems.erase(sysIt);
-				}
-			}
-			ANI_LOG_INFO("Unregistered system: %s", typeid(T).name());
-		}
+            ComponentTypeID typeId = m_nextComponentID++;
+            m_componentNameToID[name] = typeId;
+            m_componentIDToName[typeId] = name;
+            m_componentTypeToID[typeIdx] = typeId;
 
-		template <typename T>
-		std::shared_ptr<T> GetSystem() {
-			std::type_index typeIdx = std::type_index(typeid(T));
-			auto it = m_systemTypeToID.find(typeIdx);
-			if (it != m_systemTypeToID.end()) {
-				auto sysIt = registeredSystems.find(it->second);
-				if (sysIt != registeredSystems.end()) {
-					return std::static_pointer_cast<T>(sysIt->second);
-				}
-			}
-			return nullptr;
-		}
+            AddCompList<T>();
 
-		template<typename T>
-		ComponentTypeID RegisterComponent(const std::string& name) {
-			static_assert(std::is_base_of_v<BaseComponent, T>,
-				"ALL components must derive from BaseComponent");
+            RegisterComponentType(
+                typeId,
+                [this, typeId, name](EntityID entity) {
+                    GetEntitySignature(entity)->insert(typeId);
+                    T componentInstance{};
+                    componentInstance.entityID = entity;
+                    GetCompList<T>()->Insert(entity, componentInstance);
+                    UpdateEntityTargetSystem(entity);
+                },
+                [this, typeId, name](EntityID entity) -> BaseComponent* {
+                    if (!HasComponentById(entity, typeId)) {
+                        ANI_LOG_DEBUG("[ComponentGetter] Entity %u lacks %s",
+                            entity, name.c_str());
+                        return nullptr;
+                    }
+                    try {
+                        return &GetCompList<T>()->Get(entity);
+                    }
+                    catch (const std::exception& e) {
+                        ANI_LOG_ERROR("[ComponentGetter] %s: %s",
+                            name.c_str(), e.what());
+                        return nullptr;
+                    }
+                }
+            );
 
-			std::type_index typeIdx = std::type_index(typeid(T));
+            return typeId;
+        }
 
-			auto typeIt = m_componentTypeToID.find(typeIdx);
-			if (typeIt != m_componentTypeToID.end()) {
-				return typeIt->second;
-			}
+        template<typename T>
+        void UnregisterComponent();
+        void UnregisterComponentByName(const std::string& name);
+        void UnregisterComponentById(ComponentTypeID typeId);
 
-			auto nameIt = m_componentNameToID.find(name);
-			if (nameIt != m_componentNameToID.end()) {
-				ComponentTypeID typeId = nameIt->second;
-				m_componentTypeToID[typeIdx] = typeId;
-				return typeId;
-			}
+        template<typename T>
+        void AddCompList() {
+            std::type_index typeIdx = std::type_index(typeid(T));
+            auto it = m_componentTypeToID.find(typeIdx);
+            ComponentTypeID compType;
+            if (it != m_componentTypeToID.end()) {
+                compType = it->second;
+            }
+            else {
+                compType = m_nextComponentID++;
+                m_componentTypeToID[typeIdx] = compType;
+            }
+            assert(componentsArrays.find(compType) == componentsArrays.end() && "CompList already registered!");
+            componentsArrays[compType] = std::move(std::make_shared<CompList<T>>());
+        }
 
-			ComponentTypeID typeId = m_nextComponentID++;
-			m_componentNameToID[name] = typeId;
-			m_componentIDToName[typeId] = name;
-			m_componentTypeToID[typeIdx] = typeId;
+        template<typename T>
+        std::shared_ptr<CompList<T>> GetCompList() {
+            std::type_index typeIdx = std::type_index(typeid(T));
+            auto it = m_componentTypeToID.find(typeIdx);
+            ComponentTypeID compType;
+            if (it != m_componentTypeToID.end()) {
+                compType = it->second;
+            }
+            else {
+                compType = m_nextComponentID++;
+                m_componentTypeToID[typeIdx] = compType;
+            }
+            if (componentsArrays.count(compType) == 0) { AddCompList<T>(); }
+            return std::static_pointer_cast<CompList<T>>(componentsArrays.at(compType));
+        }
 
-			AddCompList<T>();
+        void RemoveComponentById(EntityID entityID, ComponentTypeID componentId);
+        bool HasComponentById(const EntityID entity, ComponentTypeID componentId);
+        std::vector<EntityID> GetAllEntities() const;
+        std::vector<ComponentTypeID> GetEntityComponents(EntityID entity) const;
 
-			RegisterComponentType(
-				typeId,
-				[this, typeId, name](EntityID entity) {
-					GetEntitySignature(entity)->insert(typeId);
+        ComponentTypeID GetComponentTypeIdByName(const std::string& name) const;
+        std::string GetComponentNameById(ComponentTypeID typeId) const;
+        std::vector<std::string> GetAllRegisteredComponentNames() const;
+        bool IsComponentNameRegistered(const std::string& name) const;
 
-					auto compList = GetCompList<T>();
+        nlohmann::json SerializeEntity(const EntityID entity) const;
+        EntityID CloneEntity(const EntityID sourceEntity);
+        EntityID DeserializeEntity(const nlohmann::json& json);
+        void DeserializeEntity(const nlohmann::json& json, const EntityID entity);
 
-					T componentInstance{};
-					componentInstance.entityID = entity;
-					compList->Insert(componentInstance);
+        using EntityClonedCallback = std::function<void(EntityID sourceEntity, EntityID newEntity)>;
+        void RegisterEntityClonedCallback(void* owner, EntityClonedCallback cb);
+        void UnregisterCallbacksForOwner(void* owner);
 
-					try {
-						BaseComponent* comp = &compList->Get(entity);
-						(void)comp;
-					}
-					catch (const std::exception& e) {
-						ANI_LOG_ERROR("[ComponentCreator] ERROR: Failed to get component after creation: %s",
-							e.what());
-					}
+        using ComponentCreator = std::function<void(EntityID)>;
+        using ComponentGetter = std::function<BaseComponent* (EntityID)>;
+        void RegisterComponentType(ComponentTypeID typeId, ComponentCreator creator, ComponentGetter getter);
+        void UnregisterPluginSystem(SystemTypeID systemId);
+        void UnregisterPluginComponent(ComponentTypeID componentId);
 
-					UpdateEntityTargetSystem(entity);
-				},
-				[this, typeId, name](EntityID entity) -> BaseComponent* {
-					if (!HasComponentById(entity, typeId)) {
-						ANI_LOG_DEBUG("[ComponentGetter] DEBUG: Entity %u doesn't have component %s in signature",
-							entity, name.c_str());
-						return nullptr;
-					}
+        void RegisterPluginComponent(ComponentTypeID typeId,
+            size_t componentSize,
+            std::function<void(void*, EntityID)> constructor,
+            std::function<void(void*)> destructor);
 
-					try {
-						auto compList = GetCompList<T>();
-						BaseComponent* comp = &compList->Get(entity);
-						return comp;
-					}
-					catch (const std::exception& e) {
-						ANI_LOG_ERROR("[ComponentGetter] ERROR: Failed to get component %s: %s",
-							name.c_str(), e.what());
-						return nullptr;
-					}
-				}
-			);
+        void* GetPluginComponent(EntityID entity, ComponentTypeID typeId);
+        void* AddPluginComponent(EntityID entity, ComponentTypeID typeId);
+        void RemovePluginComponent(EntityID entity, ComponentTypeID typeId);
+        bool HasPluginComponent(EntityID entity, ComponentTypeID typeId);
 
-			return typeId;
-		}
+        void RegisterPluginSystem(SystemTypeID typeId,
+            std::function<void* (EntityManager*)> creator,
+            std::function<void(void*)> destructor,
+            std::function<void(void*, float)> updater,
+            std::function<void(void*)> starter,
+            const std::vector<ComponentTypeID>& requiredComponents);
 
-		template<typename T>
-		void UnregisterComponent();
-		void UnregisterComponentByName(const std::string& name);
-		void UnregisterComponentById(ComponentTypeID typeId);
+        void* GetPluginSystem(SystemTypeID typeId);
+        void UpdatePluginSystems(float deltaTime);
 
-		template<typename T>
-		void AddCompList() {
-			std::type_index typeIdx = std::type_index(typeid(T));
-			auto it = m_componentTypeToID.find(typeIdx);
-			ComponentTypeID compType;
-			if (it != m_componentTypeToID.end()) {
-				compType = it->second;
-			}
-			else {
-				compType = m_nextComponentID++;
-				m_componentTypeToID[typeIdx] = compType;
-			}
-			assert(componentsArrays.find(compType) == componentsArrays.end() && "CompList already registered!");
-			componentsArrays[compType] = std::move(std::make_shared<CompList<T>>());
-		}
+        std::shared_ptr<EntitySignature> GetEntitySignature(const EntityID entity);
 
-		template<typename T>
-		std::shared_ptr<CompList<T>> GetCompList() {
-			std::type_index typeIdx = std::type_index(typeid(T));
-			auto it = m_componentTypeToID.find(typeIdx);
-			ComponentTypeID compType;
-			if (it != m_componentTypeToID.end()) {
-				compType = it->second;
-			}
-			else {
-				compType = m_nextComponentID++;
-				m_componentTypeToID[typeIdx] = compType;
-			}
-			if (componentsArrays.count(compType) == 0) { AddCompList<T>(); }
-			return std::static_pointer_cast<CompList<T>>(componentsArrays.at(compType));
-		}
+        void RemoveComponentFromAllEntities(ComponentTypeID typeId);
+        BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId);
+        const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const;
+        bool IsPluginComponent(ComponentTypeID typeId);
 
-		void RemoveComponentById(EntityID entityID, ComponentTypeID componentId);
-		bool HasComponentById(const EntityID entity, ComponentTypeID componentId);
-		std::vector<EntityID> GetAllEntities() const;
-		std::vector<ComponentTypeID> GetEntityComponents(EntityID entity) const;
+        EntityID GetEntityCount() const;
+        std::queue<EntityID> GetAvailableEntities() const;
+        const std::map<EntityID, std::shared_ptr<EntitySignature>>& GetEntitiesSignatures() const;
+        const std::map<SystemTypeID, std::shared_ptr<BaseSystem>>& GetRegisteredSystems() const;
+        const std::map<ComponentTypeID, std::shared_ptr<ICompList>>& GetComponentsArrays() const;
 
-		ComponentTypeID GetComponentTypeIdByName(const std::string& name) const;
-		std::string GetComponentNameById(ComponentTypeID typeId) const;
-		std::vector<std::string> GetAllRegisteredComponentNames() const;
-		bool IsComponentNameRegistered(const std::string& name) const;
+        void DebugPrintRegisteredComponents() const;
+        void DebugPrintEntityComponents(EntityID entity) const;
+        void DebugPrintPluginSystems() const;
+        bool IsEntityInSystem(const EntityID entity, const EntitySignature& system_signature);
 
-		nlohmann::json SerializeEntity(const EntityID entity) const;
-		EntityID CloneEntity(const EntityID sourceEntity);
-		EntityID DeserializeEntity(const nlohmann::json& json);
-		void DeserializeEntity(const nlohmann::json& json, const EntityID entity);
+    private:
+        void AddEntitySignature(const EntityID entity);
+        void UpdateEntityTargetSystem(const EntityID entity);
 
-		using ComponentCreator = std::function<void(EntityID)>;
-		using ComponentGetter = std::function<BaseComponent* (EntityID)>;
-		void RegisterComponentType(ComponentTypeID typeId, ComponentCreator creator, ComponentGetter getter);
-		void UnregisterPluginSystem(SystemTypeID systemId);
-		void UnregisterPluginComponent(ComponentTypeID componentId);
+        EntityID entityCount;
 
-		void RegisterPluginComponent(ComponentTypeID typeId,
-			size_t componentSize,
-			std::function<void(void*, EntityID)> constructor,
-			std::function<void(void*)> destructor);
+        std::queue<EntityID> m_freeEntityIDs;
+        EntityID nextFreshID = 1;
 
-		void* GetPluginComponent(EntityID entity, ComponentTypeID typeId);
-		void* AddPluginComponent(EntityID entity, ComponentTypeID typeId);
-		void RemovePluginComponent(EntityID entity, ComponentTypeID typeId);
-		bool HasPluginComponent(EntityID entity, ComponentTypeID typeId);
+        std::vector<uint64_t> m_generations;
 
-		void RegisterPluginSystem(SystemTypeID typeId,
-			std::function<void* (EntityManager*)> creator,
-			std::function<void(void*)> destructor,
-			std::function<void(void*, float)> updater,
-			std::function<void(void*)> starter,
-			const std::vector<ComponentTypeID>& requiredComponents);
+        std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
+        std::map<SystemTypeID, std::shared_ptr<BaseSystem>> registeredSystems;
+        std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
+        std::unordered_map<ComponentTypeID, ComponentCreator> componentCreators;
+        std::unordered_map<ComponentTypeID, ComponentGetter> componentGetters;
 
-		void* GetPluginSystem(SystemTypeID typeId);
-		void UpdatePluginSystems(float deltaTime);
+        ComponentTypeID m_nextComponentID = 0;
+        std::unordered_map<std::string, ComponentTypeID> m_componentNameToID;
+        std::unordered_map<ComponentTypeID, std::string> m_componentIDToName;
+        std::unordered_map<std::type_index, ComponentTypeID> m_componentTypeToID;
 
-		std::shared_ptr<EntitySignature> GetEntitySignature(const EntityID entity);
+        SystemTypeID m_nextSystemID = 0;
+        std::unordered_map<std::type_index, SystemTypeID> m_systemTypeToID;
+        std::unordered_map<std::string, SystemTypeID> m_systemNameToID;
+        std::unordered_map<SystemTypeID, std::string> m_systemIDToName;
 
-		void RemoveComponentFromAllEntities(ComponentTypeID typeId);
-		BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId);
-		const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const;
-		bool IsPluginComponent(ComponentTypeID typeId);
+        std::vector<std::pair<void*, EntityClonedCallback>> m_entityClonedCallbacks;
 
-		EntityID GetEntityCount() const;
-		std::queue<EntityID> GetAvailableEntities() const;
-		const std::map<EntityID, std::shared_ptr<EntitySignature>>& GetEntitiesSignatures() const;
-		const std::map<SystemTypeID, std::shared_ptr<BaseSystem>>& GetRegisteredSystems() const;
-		const std::map<ComponentTypeID, std::shared_ptr<ICompList>>& GetComponentsArrays() const;
-
-		void DebugPrintRegisteredComponents() const;
-		void DebugPrintEntityComponents(EntityID entity) const;
-		void DebugPrintPluginSystems() const;
-		bool IsEntityInSystem(const EntityID entity, const EntitySignature& system_signature);
-
-	private:
-		void AddEntitySignature(const EntityID entity);
-		void UpdateEntityTargetSystem(const EntityID entity);
-		void CopyComponentResources(EntityID sourceEntity, EntityID destEntity, ComponentTypeID componentId);
-
-		EntityID entityCount;
-
-		// Freed IDs are returned to a LIFO free list and handed out
-		// again by AddNewEntity(). Slot 0 is reserved as the null
-		// handle and is never handed out.
-		std::queue<EntityID> m_freeEntityIDs;
-		EntityID nextFreshID = 1;
-
-		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
-		std::map<SystemTypeID, std::shared_ptr<BaseSystem>> registeredSystems;
-		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
-		std::unordered_map<ComponentTypeID, ComponentCreator> componentCreators;
-		std::unordered_map<ComponentTypeID, ComponentGetter> componentGetters;
-
-		ComponentTypeID m_nextComponentID = 0;
-		std::unordered_map<std::string, ComponentTypeID> m_componentNameToID;
-		std::unordered_map<ComponentTypeID, std::string> m_componentIDToName;
-		std::unordered_map<std::type_index, ComponentTypeID> m_componentTypeToID;
-
-		SystemTypeID m_nextSystemID = 0;
-		std::unordered_map<std::type_index, SystemTypeID> m_systemTypeToID;
-		std::unordered_map<std::string, SystemTypeID> m_systemNameToID;
-		std::unordered_map<SystemTypeID, std::string> m_systemIDToName;
-
-		struct PluginSystemInfo {
-			void* instance;
-			std::function<void(void*)> destructor;
-			std::function<void(void*, float)> updater;
-			std::vector<ComponentTypeID> requiredComponents;
-			std::set<EntityID> entities;
-		};
-		std::map<SystemTypeID, PluginSystemInfo> pluginSystems;
-	};
+        struct PluginSystemInfo {
+            void* instance;
+            std::function<void(void*)> destructor;
+            std::function<void(void*, float)> updater;
+            std::vector<ComponentTypeID> requiredComponents;
+            std::set<EntityID> entities;
+        };
+        std::map<SystemTypeID, PluginSystemInfo> pluginSystems;
+    };
 }

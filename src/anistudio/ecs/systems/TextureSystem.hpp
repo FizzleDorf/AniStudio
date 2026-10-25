@@ -28,8 +28,6 @@ namespace ECS {
         GLuint* targetTexture = nullptr;
     };
 
-    // Uploads decoded frames to GL textures. Image data is owned by this
-    // system; video frame data is owned by VideoSystem.
     class TextureSystem : public BaseSystem {
     public:
         using VideoTextureCallback =
@@ -47,6 +45,7 @@ namespace ECS {
         void CancelPendingRequests(EntityID e);
 
         void CreatePendingTextures();
+        void EnsureTextureForEntity(EntityID e);
 
         void RemoveTexture(EntityID e);
 
@@ -67,4 +66,4 @@ namespace ECS {
         void DeleteTexture(TextureComponent& tc);
     };
 
-} // namespace ECS
+}

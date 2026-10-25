@@ -29,14 +29,10 @@ namespace ECS {
         void Update(float deltaT) override;
         void Destroy() override;
 
-        // Allocates a new entity, then delegates to AttachMedia.
         EntityID LoadMedia(const std::string& filePath,
             TrackType type = TrackType::Video,
             PlaybackMode mode = PlaybackMode::Cached);
 
-        // Loads into an existing entity. Adds VideoComponent / AudioComponent
-        // / PlaybackStateComponent as required. Safe to call repeatedly on
-        // the same entity to swap media (e.g. a preview pane).
         bool AttachMedia(EntityID entity,
             const std::string& filePath,
             TrackType type = TrackType::Video,
@@ -105,4 +101,4 @@ namespace ECS {
         void ResumePlaybackIfRequested(EntityID entity);
     };
 
-} // namespace ECS
+}

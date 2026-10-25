@@ -37,6 +37,19 @@ namespace ECS {
             video->RegisterVideoRemovedCallback(this, [this](EntityID e) {
                 RemoveTexture(e);
                 });
+
+            video->RegisterVideoTextureCallback(this,
+                [this](EntityID e, const uint8_t* data, int w, int h, int ch) {
+                    if (!data || w <= 0 || h <= 0 || ch <= 0) return;
+                    if (!mgr.IsEntityValid(e)) return;
+
+                    size_t sz = static_cast<size_t>(w) * h * ch;
+                    unsigned char* copy = static_cast<unsigned char*>(malloc(sz));
+                    if (!copy) return;
+                    memcpy(copy, data, sz);
+
+                    QueueVideoTextureCreation(e, copy, w, h, ch, nullptr);
+                });
         }
 
         auto image = mgr.GetSystem<ImageSystem>();
@@ -120,6 +133,25 @@ namespace ECS {
         m_needsTextureCreation = !textureQueue.empty();
     }
 
+    void TextureSystem::EnsureTextureForEntity(EntityID e) {
+        if (!mgr.IsEntityValid(e)) return;
+
+        if (mgr.HasComponent<TextureComponent>(e)) {
+            auto& tc = mgr.GetComponent<TextureComponent>(e);
+            if (tc.textureID != 0 && glIsTexture(tc.textureID)) return;
+        }
+
+        if (!mgr.HasComponent<ImageComponent>(e)) return;
+        auto& img = mgr.GetComponent<ImageComponent>(e);
+        if (!img.imageData || img.width <= 0 || img.height <= 0 || img.channels <= 0) return;
+
+        size_t sz = static_cast<size_t>(img.width) * img.height * img.channels;
+        unsigned char* copy = static_cast<unsigned char*>(malloc(sz));
+        if (!copy) return;
+        memcpy(copy, img.imageData, sz);
+        QueueTextureCreation(e, copy, img.width, img.height, img.channels);
+    }
+
     void TextureSystem::CreatePendingTextures() {
         std::lock_guard<std::mutex> lock(queueMutex);
         if (textureQueue.empty()) {
@@ -154,11 +186,7 @@ namespace ECS {
                 continue;
             }
 
-            if (req.isVideo) {
-                if (!req.targetTexture) {
-                    if (req.imageData) free(req.imageData);
-                    continue;
-                }
+            if (req.isVideo && req.targetTexture) {
                 if (*req.targetTexture != 0) {
                     glDeleteTextures(1, req.targetTexture);
                     *req.targetTexture = 0;
@@ -167,23 +195,29 @@ namespace ECS {
                     req.width, req.height, req.channels, req.imageData);
                 if (id != 0) *req.targetTexture = id;
                 if (req.imageData) free(req.imageData);
+                continue;
+            }
+
+            if (!mgr.HasComponent<TextureComponent>(req.entityID)) {
+                mgr.AddComponent<TextureComponent>(req.entityID);
+            }
+            auto& tc = mgr.GetComponent<TextureComponent>(req.entityID);
+            if (tc.textureID != 0) {
+                Utils::OpenGLUtils::DeleteTexture(tc.textureID);
+                tc.textureID = 0;
+            }
+            tc.textureID = Utils::OpenGLUtils::GenerateTexture(
+                req.width, req.height, req.channels, req.imageData);
+            if (tc.textureID != 0) {
+                tc.width = req.width;
+                tc.height = req.height;
+                tc.channels = req.channels;
+            }
+
+            if (req.isVideo) {
+                if (req.imageData) free(req.imageData);
             }
             else {
-                if (!mgr.HasComponent<TextureComponent>(req.entityID)) {
-                    mgr.AddComponent<TextureComponent>(req.entityID);
-                }
-                auto& tc = mgr.GetComponent<TextureComponent>(req.entityID);
-                if (tc.textureID != 0) {
-                    Utils::OpenGLUtils::DeleteTexture(tc.textureID);
-                    tc.textureID = 0;
-                }
-                tc.textureID = Utils::OpenGLUtils::GenerateTexture(
-                    req.width, req.height, req.channels, req.imageData);
-                if (tc.textureID != 0) {
-                    tc.width = req.width;
-                    tc.height = req.height;
-                    tc.channels = req.channels;
-                }
                 if (req.imageData) Utils::ImageUtils::FreeImageData(req.imageData);
             }
         }
@@ -236,4 +270,4 @@ namespace ECS {
         }
     }
 
-} // namespace ECS
+}

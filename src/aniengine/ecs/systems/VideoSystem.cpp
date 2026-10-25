@@ -344,8 +344,26 @@ namespace ECS {
         r.fmtCtx = nullptr; r.codecCtx = nullptr; r.swsCtx = nullptr;
         r.frame = nullptr;  r.pkt = nullptr;
 
+        PrimeFirstFrame(e, std::move(r));
+
         NotifyVideoAdded(e);
         NotifyLoadComplete(e, true);
+    }
+
+    void VideoSystem::PrimeFirstFrame(EntityID entity, LoadResult&& result) {
+        if (!result.firstFrameRGBA.empty() && result.width > 0 && result.height > 0) {
+            for (auto& [o, cb] : m_textureCallbacks) {
+                (void)o;
+                try {
+                    cb(entity,
+                        result.firstFrameRGBA.data(),
+                        result.width,
+                        result.height,
+                        4);
+                }
+                catch (...) {}
+            }
+        }
     }
 
     VideoSystem::LoadResult VideoSystem::LoadVideoInBackground(const std::string& filePath, EntityID entity) {

@@ -527,7 +527,7 @@ jobs:
           retention-days: 1
 
   # =====================================================================
-  # WINDOWS PLUGINS ? mirrors plugins/AniStudio-SDCPP/build.bat
+  # WINDOWS PLUGINS ? short BUILD_DIR under C:\ to avoid MAX_PATH
   # =====================================================================
   plugin-windows:
     needs: core-windows
@@ -632,16 +632,17 @@ jobs:
           echo "$binPath" >> $env:GITHUB_PATH
           echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
 
-      # Mirrors plugins/AniStudio-SDCPP/build.bat: no -G Ninja, no -A x64,
-      # no explicit CMAKE_C/CXX_COMPILER, no CXXFLAGS override. The default
-      # generator (Visual Studio 17 2022 x64) is what home uses, and it works.
+      # Default VS 2022 generator (matches build.bat). BUILD_DIR is a short
+      # path under C:\ because the vulkan-shaders-gen ExternalProject does a
+      # try_compile whose .tlog path blows past the 260-char MAX_PATH limit
+      # when the build tree lives under D:\a\AniStudio\AniStudio\build\... .
       - name: Build Plugin
         shell: bash
         run: |
           set -euo pipefail
           BACKEND="${{ matrix.backend }}"
           NAME="AniStudio-SDCPP_${BACKEND}"
-          BUILD_DIR="build/plugins/${NAME}/build"
+          BUILD_DIR="C:/b/${BACKEND}"
           STAGING_DIR="build/plugins/${NAME}/staging"
           mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 
@@ -714,137 +715,4 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: echo "hash=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Download core artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: Core-*
-          merge-multiple: true
-
-      - name: Download plugin artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: Plugin-*
-          merge-multiple: true
-
-      - name: Download CUDA runtime (Windows)
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          path: artifacts
-          pattern: CudaRuntime-*
-          merge-multiple: true
-
-      - name: Check required plugins
-        shell: bash
-        run: |
-          missing=0
-          for b in CPU VULKAN CUDA; do
-            [ -f "artifacts/AniStudio-SDCPP_${b}-linux-x64.tar.gz" ]  || { echo "::error::missing required Linux plugin $b"; missing=1; }
-            [ -f "artifacts/AniStudio-SDCPP_${b}-windows-x64.zip" ]   || { echo "::error::missing required Windows plugin $b"; missing=1; }
-          done
-          if [ "$missing" -ne 0 ] && [ "${{ inputs.allow_partial_release }}" != "true" ]; then
-            echo "Re-run with allow_partial_release=true to publish without them."
-            exit 1
-          fi
-
-      - name: Assemble Bundles
-        shell: bash
-        run: |
-          set -euo pipefail
-          SHORT_HASH="${{ steps.ver.outputs.hash }}"
-          ls -R artifacts
-
-          lin() { f="artifacts/AniStudio-SDCPP_$1-linux-x64.tar.gz"; if [ -f "$f" ]; then tar -xzf "$f" -C "$2/plugins"; else echo "::warning::missing Linux plugin $1"; fi; }
-          win() { f="artifacts/AniStudio-SDCPP_$1-windows-x64.zip";  if [ -f "$f" ]; then unzip -q -o "$f" -d "$2/plugins"; else echo "::warning::missing Windows plugin $1"; fi; }
-
-          for VENDOR in Nvidia AMD Intel; do
-            STAGE="stage-linux-${VENDOR}"
-            mkdir -p "$STAGE/plugins"
-            tar -xzf artifacts/AniStudio-Linux-x64.tar.gz -C "$STAGE"
-            lin CPU "$STAGE"; lin VULKAN "$STAGE"
-            case "$VENDOR" in
-              Nvidia) lin CUDA "$STAGE" ;;
-              AMD)    lin HIP  "$STAGE" ;;
-              Intel)  lin SYCL "$STAGE" ;;
-            esac
-            tar -czf "AniStudio-${VENDOR}-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
-          done
-
-          for VENDOR in Nvidia AMD Intel; do
-            STAGE="stage-win-${VENDOR}"
-            mkdir -p "$STAGE/plugins"
-            unzip -q artifacts/AniStudio-Windows-x64.zip -d "$STAGE"
-            win CPU "$STAGE"; win VULKAN "$STAGE"
-            case "$VENDOR" in
-              Nvidia)
-                win CUDA "$STAGE"
-                if [ -f artifacts/cudart-AniStudio-win-cu12-x64.zip ]; then unzip -q -o artifacts/cudart-AniStudio-win-cu12-x64.zip -d "$STAGE"; fi
-                ;;
-              AMD) win HIP "$STAGE" ;;
-            esac
-            (cd "$STAGE" && zip -qr "../AniStudio-${VENDOR}-Bundle-windows-x64-${SHORT_HASH}.zip" .)
-          done
-
-      - name: Generate Release Body
-        shell: bash
-        run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
-          if [ -z "$LAST_TAG" ]; then
-            DIFF_URL="${REPO_URL}/commits/${GITHUB_SHA}"
-            RANGE_ARG=""
-          else
-            DIFF_URL="${REPO_URL}/compare/${LAST_TAG}...${GITHUB_SHA}"
-            RANGE_ARG="${LAST_TAG}..HEAD"
-          fi
-
-          HANDLES="$(
-            git log ${RANGE_ARG:--n 20} --no-merges --format='%ae' \
-              | sort -u \
-              | while read -r email; do
-                  login=$(gh api "search/users?q=${email}+in:email" --jq '.items[0].login // empty' 2>/dev/null || true)
-                  [ -n "$login" ] && echo "@${login}"
-                done \
-              | sort -u
-          )"
-
-          {
-            echo "## What's Changed"
-            echo
-            echo "**Full Changelog / Diff**: ${DIFF_URL}"
-            echo
-            echo "## Notes"
-            echo "- CUDA plugins are built with CUDA 12.8. Windows CUDA runtime DLLs are included in the Nvidia bundle and published separately as cudart-AniStudio-win-cu12-x64.zip."
-            echo "- Linux CUDA plugins need the NVIDIA CUDA 12 runtime libraries installed."
-            echo "- HIP and SYCL plugins are best effort; they are missing from a release when their build failed."
-          } > release_body.md
-
-      - name: Publish Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: AniStudio-${{ steps.ver.outputs.hash }}
-          name: AniStudio-${{ steps.ver.outputs.hash }}
-          target_commitish: ${{ github.sha }}
-          body_path: release_body.md
-          generate_release_notes: true
-          overwrite_files: true
-          fail_on_unmatched_files: false
-          files: |
-            artifacts/AniStudio-Linux-x64.tar.gz
-            artifacts/AniStudio-Windows-x64.zip
-            artifacts/AniStudio-SDCPP_*-linux-x64.tar.gz
-            artifacts/AniStudio-SDCPP_*-windows-x64.zip
-            artifacts/cudart-AniStudio-win-cu12-x64.zip
-            AniStudio-*-Bundle-linux-x64-*.tar.gz
-            AniStudio-*-Bundle-windows-x64-*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 

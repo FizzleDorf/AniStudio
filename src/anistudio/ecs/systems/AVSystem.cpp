@@ -152,9 +152,6 @@ namespace ECS {
         if (!mgr.IsEntityValid(e) || !mgr.HasComponent<PlaybackStateComponent>(e)) return;
         auto& st = mgr.GetComponent<PlaybackStateComponent>(e);
 
-        // Only start playback when every present subsystem has finished
-        // loading. Otherwise we'd call Play on a half-loaded entity and
-        // the video or audio side would refuse.
         if (!IsMediaReady(e)) {
             ANI_LOG_DEBUG("[AVSystem] ResumePlaybackIfRequested entity=%u not ready yet", e);
             return;
@@ -167,8 +164,6 @@ namespace ECS {
         ANI_LOG_DEBUG("[AVSystem] ResumePlaybackIfRequested entity=%u keepTime=%.3f",
             e, st.currentTime);
 
-        // Restore the clock before starting playback so the first frame
-        // produced is at the right position.
         if (IsVideoEntity(e) && m_video) m_video->Seek(e, st.currentTime);
         if (IsAudioEntity(e) && m_audio) m_audio->Seek(e, st.currentTime);
 
@@ -213,10 +208,6 @@ namespace ECS {
         ResumePlaybackIfRequested(e);
     }
 
-    // ------------------------------------------------------------------
-    // LoadMedia / AttachMedia
-    // ------------------------------------------------------------------
-
     EntityID AVSystem::LoadMedia(const std::string& filePath,
         TrackType type,
         PlaybackMode mode) {
@@ -258,7 +249,6 @@ namespace ECS {
             if (m_audio) m_audio->RemoveAudio(e);
         }
 
-        // (Re)initialize the playback state on this entity.
         if (!mgr.HasComponent<PlaybackStateComponent>(e))
             mgr.AddComponent<PlaybackStateComponent>(e);
         auto& st = mgr.GetComponent<PlaybackStateComponent>(e);
@@ -370,8 +360,6 @@ namespace ECS {
             e, static_cast<int>(st.mode), static_cast<int>(mode),
             keepTime, wasPlaying ? 1 : 0);
 
-        // Store the target mode and desired restore state on the component.
-        // The load callbacks will read these when the reload finishes.
         st.mode = mode;
         st.state = wasPlaying ? PlaybackState::Playing : PlaybackState::Stopped;
         st.isPaused = !wasPlaying;
@@ -386,13 +374,9 @@ namespace ECS {
         if (!mgr.IsEntityValid(e) || !mgr.HasComponent<PlaybackStateComponent>(e)) return;
         auto& st = mgr.GetComponent<PlaybackStateComponent>(e);
 
-        // Stop both subsystems first so workers and audio producers are
-        // joined before we tear down decoder resources.
         if (IsVideoEntity(e) && m_video) m_video->Stop(e);
         if (IsAudioEntity(e) && m_audio) m_audio->Stop(e);
 
-        // Capture the file paths before unloading, because Unload clears
-        // filePath on the component in some implementations.
         std::string videoPath;
         if (mgr.HasComponent<VideoComponent>(e)) {
             videoPath = mgr.GetComponent<VideoComponent>(e).filePath;
@@ -402,14 +386,9 @@ namespace ECS {
             audioPath = mgr.GetComponent<AudioComponent>(e).filePath;
         }
 
-        // Unload decoders, PCM, tracks, everything.
         if (IsVideoEntity(e) && m_video) m_video->ClearCache(e);
         if (IsAudioEntity(e) && m_audio) m_audio->ClearCache(e);
 
-        // Re-issue loads in the new mode. These are async; the load
-        // callbacks (OnVideoLoaded / OnAudioAdded) will fire when each
-        // subsystem is ready, and they in turn call ResumePlaybackIfRequested
-        // which checks that both are ready before restoring position.
         if (!videoPath.empty() && IsVideoEntity(e) && m_video) {
             m_video->LoadVideo(e, videoPath, st.mode);
         }
@@ -427,14 +406,16 @@ namespace ECS {
         st.state = PlaybackState::Playing;
         st.isPaused = false;
 
-        if (!IsMediaReady(e)) {
-            ANI_LOG_DEBUG("[AVSystem] Play entity=%u media not ready yet, deferring", e);
-            FireState(e, PlaybackState::Playing);
-            return;
+        const bool videoEntity = IsVideoEntity(e);
+        const bool audioEntity = IsAudioEntity(e);
+
+        if (videoEntity && m_video) {
+            m_video->Play(e, st.looping);
         }
 
-        if (IsVideoEntity(e) && m_video) m_video->Play(e, st.looping);
-        if (IsAudioEntity(e) && m_audio) m_audio->Play(e, st.looping);
+        if (audioEntity && m_audio) {
+            m_audio->Play(e, st.looping);
+        }
 
         FireState(e, PlaybackState::Playing);
     }
@@ -556,7 +537,6 @@ namespace ECS {
 
     bool AVSystem::IsMediaReady(EntityID e) const {
         if (!mgr.IsEntityValid(e)) return false;
-        bool any = false;
 
         VideoComponent* vcPtr = nullptr;
         if (mgr.HasComponent<PreviewVideoComponent>(e)) {
@@ -573,21 +553,19 @@ namespace ECS {
         }
 
         if (vcPtr) {
-            any = true;
             std::lock_guard<std::mutex> lock(vcPtr->decoderMutex);
             if (!vcPtr->fmtCtx || vcPtr->frameCount <= 0) return false;
+            return true;
         }
 
         if (mgr.HasComponent<AudioComponent>(e)) {
-            any = true;
             auto& ac = mgr.GetComponent<AudioComponent>(e);
             if (ac.hasAudioStream && ac.pcmData.empty() && !ac.HasDecoder()) return false;
+            return true;
         }
 
-        if (!any && m_audio) {
-            if (m_audio->GetDuration(e) > 0.0) return true;
-        }
-        return any;
+        if (m_audio && m_audio->GetDuration(e) > 0.0) return true;
+        return false;
     }
 
     void AVSystem::RegisterTrackStateCallback(StateCallback cb) {

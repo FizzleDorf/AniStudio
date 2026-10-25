@@ -49,24 +49,13 @@ namespace GUI {
         if (!m_textureSystem || !data || width <= 0 || height <= 0) return;
         if (!m_entityManager.IsEntityValid(entity)) return;
 
-        // Make sure the entity has a TextureComponent to hold the GL ID.
-        if (!m_entityManager.HasComponent<ECS::TextureComponent>(entity)) {
-            m_entityManager.AddComponent<ECS::TextureComponent>(entity);
-        }
-        auto& texComp = m_entityManager.GetComponent<ECS::TextureComponent>(entity);
-
-        // Copy the frame ? VideoSystem owns the source buffer and reuses it.
         size_t sz = static_cast<size_t>(width) * height * channels;
-        unsigned char* copy = (unsigned char*)malloc(sz);
+        unsigned char* copy = static_cast<unsigned char*>(malloc(sz));
         if (!copy) return;
         memcpy(copy, data, sz);
 
-        // Hand it to TextureSystem with a pointer into the entity's
-        // TextureComponent. The component lives as long as the entity, and
-        // TextureSystem consumes the queue on the next Update() ? so the
-        // pointer stays valid.
         m_textureSystem->QueueVideoTextureCreation(
-            entity, copy, width, height, channels, &texComp.textureID);
+            entity, copy, width, height, channels, nullptr);
     }
 
     void VideoView::Init() {
@@ -182,8 +171,6 @@ namespace GUI {
         if (videoSystem) {
             m_videoSystem = videoSystem;
 
-            // Register the frame callback. Fires on the main thread once
-            // per displayed frame.
             videoSystem->RegisterVideoTextureCallback(this,
                 [this](ECS::EntityID entityID, const uint8_t* data,
                     int width, int height, int channels) {
@@ -462,7 +449,6 @@ namespace GUI {
                     ImGui::SetCursorPosX(centerX);
 
                     if (HasAudioTrack(selectedEntityID) && m_showWaveform && !m_waveformData.IsEmpty()) {
-                        float savedCursorX = ImGui::GetCursorPosX();
                         ImGui::SetCursorPosX(0);
                         RenderWaveform();
                         ImGui::SetCursorPosX(centerX);
@@ -509,12 +495,21 @@ namespace GUI {
 
         try {
             auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-            GLuint texID = 0;
-            if (m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
-                texID = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID).textureID;
-            }
 
-            if (texID == 0 || !glIsTexture(texID) || videoComp.width <= 0 || videoComp.height <= 0) {
+            auto texSys = m_entityManager.GetSystem<ECS::TextureSystem>();
+            GLuint texID = texSys ? texSys->GetTextureID(selectedEntityID) : 0;
+
+            int uploadedW = 0;
+            int uploadedH = 0;
+            if (m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
+                const auto& tc = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID);
+                uploadedW = tc.width;
+                uploadedH = tc.height;
+            }
+            const int drawW = (uploadedW > 0) ? uploadedW : videoComp.width;
+            const int drawH = (uploadedH > 0) ? uploadedH : videoComp.height;
+
+            if (texID == 0 || !glIsTexture(texID) || drawW <= 0 || drawH <= 0) {
                 const char* text = "Video loading...";
                 float textWidth = ImGui::CalcTextSize(text).x;
                 float textHeight = ImGui::GetTextLineHeight();
@@ -529,13 +524,13 @@ namespace GUI {
                 return;
             }
 
-            m_videoAspectRatio = static_cast<float>(videoComp.width) / static_cast<float>(videoComp.height);
+            m_videoAspectRatio = static_cast<float>(drawW) / static_cast<float>(drawH);
 
             ImVec2 imageSize;
 
             switch (m_displayMode) {
             case DisplayMode::ActualResolution:
-                imageSize = ImVec2(static_cast<float>(videoComp.width), static_cast<float>(videoComp.height));
+                imageSize = ImVec2(static_cast<float>(drawW), static_cast<float>(drawH));
                 break;
             case DisplayMode::Fullscreen:
             case DisplayMode::FitToWindow:
@@ -623,7 +618,6 @@ namespace GUI {
         ImGui::PushItemWidth(sliderWidth);
         ImGui::PushID("TimelineSlider");
         if (ImGui::SliderFloat("##Timeline", &m_playbackProgress, 0.0f, 1.0f, "")) {
-            // Don't seek on every frame of the drag. The seek fires on release.
             m_pendingSeek = true;
             m_pendingSeekEntity = selectedEntityID;
             m_pendingSeekTime = static_cast<double>(m_playbackProgress) * state.duration;
@@ -1458,7 +1452,6 @@ namespace GUI {
 
         m_waveformRenderer.Render(m_waveformData, m_playbackProgress, currentStr, totalStr,
             [this, duration](double progress) {
-                // Only seek when the user finishes dragging the waveform.
                 m_pendingSeek = true;
                 m_pendingSeekEntity = selectedEntityID;
                 m_pendingSeekTime = progress * duration;

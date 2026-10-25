@@ -48,19 +48,14 @@ namespace GUI {
         ANI_LOG_DEBUG("Constructed");
     }
 
-    QueueView::~QueueView() {
-    }
+    QueueView::~QueueView() {}
 
-    void QueueView::Init() {
-    }
+    void QueueView::Init() {}
 
     bool QueueView::IsDiffusionView(BaseView* view) const {
         if (!view) return false;
-        for (size_t i = 0; i < DIFFUSION_VIEWS_COUNT; ++i) {
-            if (view->viewName == DIFFUSION_VIEWS[i]) {
-                return true;
-            }
-        }
+        for (size_t i = 0; i < DIFFUSION_VIEWS_COUNT; ++i)
+            if (view->viewName == DIFFUSION_VIEWS[i]) return true;
         return false;
     }
 
@@ -68,16 +63,11 @@ namespace GUI {
         m_availableViews.clear();
 
         WorkspaceID currentWorkspace = GetViewManager().GetActiveWorkspace();
-
         auto allViews = GetViewManager().GetAllViews();
         for (auto* view : allViews) {
             if (!view) continue;
-
             if (view->GetID() != currentWorkspace) continue;
-
-            if (IsDiffusionView(view)) {
-                m_availableViews.push_back(view);
-            }
+            if (IsDiffusionView(view)) m_availableViews.push_back(view);
         }
 
         if (m_selectedViewIndex >= (int)m_availableViews.size())
@@ -101,13 +91,11 @@ namespace GUI {
             displayNamePtrs.push_back(displayNames.back().c_str());
         }
 
-        if (ImGui::Combo("Select View", &m_selectedViewIndex, displayNamePtrs.data(), (int)displayNamePtrs.size())) {
-        }
+        ImGui::Combo("Select View", &m_selectedViewIndex, displayNamePtrs.data(), (int)displayNamePtrs.size());
     }
 
     void QueueView::QueueFromSelectedView() {
-        if (m_selectedViewIndex < 0 || m_selectedViewIndex >= (int)m_availableViews.size())
-            return;
+        if (m_selectedViewIndex < 0 || m_selectedViewIndex >= (int)m_availableViews.size()) return;
         auto* view = m_availableViews[m_selectedViewIndex];
         auto info = GetViewQueueInfo(view);
         if (!info.valid) {
@@ -119,18 +107,6 @@ namespace GUI {
         if (newEntity == 0) {
             ANI_LOG_ERROR("Failed to clone entity %u", (unsigned)info.entity);
             return;
-        }
-
-        // forcing samplercomp copy. weird bug with int64_t
-        // reverting to default after deserialization. this could just be
-        // a dirty build but regardless it's here for now.
-        if (m_entityManager.HasComponent<SamplerComponent>(info.entity)) {
-            auto& src = m_entityManager.GetComponent<SamplerComponent>(info.entity);
-            if (m_entityManager.HasComponent<SamplerComponent>(newEntity))
-                m_entityManager.RemoveComponent<SamplerComponent>(newEntity);
-            m_entityManager.AddComponent<SamplerComponent>(newEntity);
-            auto& dst = m_entityManager.GetComponent<SamplerComponent>(newEntity);
-            dst = src;
         }
 
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
@@ -164,8 +140,16 @@ namespace GUI {
             ImGui::Text("Status: %s", item.processing ? "Active" : "Queued");
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Copy Entity Metadata")) {
-                GUI::Clipboard::CopyEntity(m_entityManager, item.entityID);
+            // Only allow copy if the entity still exists with the same
+            // generation the queue captured. This avoids showing a
+            // recycled entity's metadata under the wrong queue entry.
+            if (m_entityManager.IsEntityValid(item.entityID)) {
+                if (ImGui::MenuItem("Copy Entity Metadata")) {
+                    GUI::Clipboard::CopyEntity(m_entityManager, item.entityID);
+                }
+            }
+            else {
+                ImGui::TextDisabled("Entity no longer exists");
             }
 
             ImGui::EndPopup();
@@ -208,13 +192,11 @@ namespace GUI {
         if (buttonWidth1 < 0) buttonWidth1 = 0;
 
         if (ImGui::Button("Queue", ImVec2(buttonWidth1, 0))) {
-            for (int i = 0; i < numQueues; ++i)
-                QueueFromSelectedView();
+            for (int i = 0; i < numQueues; ++i) QueueFromSelectedView();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(buttonWidth1, 0))) {
+        if (ImGui::Button("Cancel", ImVec2(buttonWidth1, 0)))
             ANI::Events::Ref().QueueEvent("CancelCurrentDiffusionTask");
-        }
 
         ImGui::Separator();
 
@@ -235,17 +217,14 @@ namespace GUI {
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Stop", ImVec2(buttonWidth2, 0))) {
+        if (ImGui::Button("Stop", ImVec2(buttonWidth2, 0)))
             ANI::Events::Ref().QueueEvent("StopCurrentDiffusionTask");
-        }
         ImGui::SameLine();
-        if (ImGui::Button("Clear Queue", ImVec2(buttonWidth2, 0))) {
+        if (ImGui::Button("Clear Queue", ImVec2(buttonWidth2, 0)))
             ANI::Events::Ref().QueueEvent("ClearDiffusionQueue");
-        }
         ImGui::SameLine();
-        if (ImGui::Button("Clear All", ImVec2(buttonWidth2, 0))) {
+        if (ImGui::Button("Clear All", ImVec2(buttonWidth2, 0)))
             ANI::Events::Ref().QueueEvent("ClearAllDiffusionTasks");
-        }
 
         ImGui::Separator();
 
@@ -352,19 +331,11 @@ namespace GUI {
     void QueueView::RenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Save Queue As...")) {
-                    SaveQueue();
-                }
-                if (ImGui::MenuItem("Load Queue...")) {
-                    LoadQueue();
-                }
+                if (ImGui::MenuItem("Save Queue As...")) SaveQueue();
+                if (ImGui::MenuItem("Load Queue...")) LoadQueue();
                 ImGui::Separator();
-                if (ImGui::MenuItem("Quick Save")) {
-                    QuickSave();
-                }
-                if (ImGui::MenuItem("Quick Load")) {
-                    QuickLoad();
-                }
+                if (ImGui::MenuItem("Quick Save")) QuickSave();
+                if (ImGui::MenuItem("Quick Load")) QuickLoad();
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -373,16 +344,10 @@ namespace GUI {
 
     void QueueView::SaveQueue() {
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-        if (!sys) {
-            ANI_LOG_WARN("SaveQueue: SDCPPSystem not available");
-            return;
-        }
+        if (!sys) { ANI_LOG_WARN("SaveQueue: SDCPPSystem not available"); return; }
 
         auto tasks = sys->GetQueueTasksWithMetadata();
-        if (tasks.empty()) {
-            ANI_LOG_DEBUG("SaveQueue: queue is empty, nothing to save");
-            return;
-        }
+        if (tasks.empty()) { ANI_LOG_DEBUG("SaveQueue: queue is empty"); return; }
 
         nlohmann::json j = nlohmann::json::array();
         for (const auto& [taskType, entityData] : tasks) {
@@ -401,40 +366,25 @@ namespace GUI {
         std::string defaultName = "queue_" + ss.str() + ".json";
 
         std::string outPath;
-        if (!FileDialog::SaveFile("Save Queue", FileDialog::FilterType::ALL_FILES, defaultName, outPath, defaultPath)) {
-            ANI_LOG_DEBUG("SaveQueue: cancelled by user");
+        if (!FileDialog::SaveFile("Save Queue", FileDialog::FilterType::ALL_FILES, defaultName, outPath, defaultPath))
             return;
-        }
 
         std::ofstream file(outPath);
-        if (file.is_open()) {
-            file << j.dump(4);
-            ANI_LOG_INFO("SaveQueue: saved %zu task(s) to %s", tasks.size(), outPath.c_str());
-        }
-        else {
-            ANI_LOG_ERROR("SaveQueue: failed to open %s for writing", outPath.c_str());
-        }
+        if (file.is_open()) file << j.dump(4);
+        else ANI_LOG_ERROR("SaveQueue: failed to open %s for writing", outPath.c_str());
     }
 
     void QueueView::LoadQueue() {
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-        if (!sys) {
-            ANI_LOG_ERROR("LoadQueue: SDCPPSystem not available");
-            return;
-        }
+        if (!sys) { ANI_LOG_ERROR("LoadQueue: SDCPPSystem not available"); return; }
 
         std::string defaultPath = std::filesystem::current_path().string() + "/data/saved_queues/";
         std::string selected;
-        if (!FileDialog::OpenFile("Load Queue File", FileDialog::FilterType::ALL_FILES, selected, defaultPath)) {
-            ANI_LOG_DEBUG("LoadQueue: cancelled by user");
+        if (!FileDialog::OpenFile("Load Queue File", FileDialog::FilterType::ALL_FILES, selected, defaultPath))
             return;
-        }
 
         std::ifstream file(selected);
-        if (!file.is_open()) {
-            ANI_LOG_ERROR("LoadQueue: failed to open %s", selected.c_str());
-            return;
-        }
+        if (!file.is_open()) { ANI_LOG_ERROR("LoadQueue: failed to open %s", selected.c_str()); return; }
 
         nlohmann::json j;
         try { file >> j; }
@@ -443,61 +393,35 @@ namespace GUI {
             return;
         }
 
-        if (!j.is_array()) {
-            ANI_LOG_ERROR("LoadQueue: invalid format (expected array) in %s", selected.c_str());
-            return;
-        }
+        if (!j.is_array()) { ANI_LOG_ERROR("LoadQueue: invalid format"); return; }
 
         sys->ClearAllTasks();
 
         int loadedCount = 0;
         for (const auto& entry : j) {
-            if (!entry.contains("taskType") || !entry.contains("entityData")) {
-                ANI_LOG_WARN("LoadQueue: skipping invalid entry (missing taskType or entityData)");
-                continue;
-            }
+            if (!entry.contains("taskType") || !entry.contains("entityData")) continue;
             int taskInt = entry["taskType"];
             auto taskType = static_cast<ECS::SDCPPSystem::TaskType>(taskInt);
-            const auto& entityData = entry["entityData"];
-            sys->QueueTaskFromSerialized(entityData, taskType);
+            sys->QueueTaskFromSerialized(entry["entityData"], taskType);
             loadedCount++;
         }
-        ANI_LOG_INFO("LoadQueue: loaded %d task(s) from %s", loadedCount, selected.c_str());
         m_queueLoaded = true;
     }
 
     void QueueView::QuickSave() {
-        if (!m_queueLoaded) {
-            ANI_LOG_TRACE("QuickSave: skipped, queue not yet loaded");
-            return;
-        }
+        if (!m_queueLoaded) return;
         try {
             auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
-            if (!ss) {
-                ANI_LOG_WARN("QuickSave: SettingsSystem unavailable");
-                return;
-            }
-
+            if (!ss) return;
             std::string dataPath = ss->GetPath("ProjectDataPath");
-            if (dataPath.empty()) {
-                dataPath = ss->GetPath("DefaultProject");
-            }
-            if (dataPath.empty()) {
-                ANI_LOG_WARN("QuickSave: no data path available");
-                return;
-            }
+            if (dataPath.empty()) dataPath = ss->GetPath("DefaultProject");
+            if (dataPath.empty()) return;
 
             auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-            if (!sys) {
-                ANI_LOG_WARN("QuickSave: SDCPPSystem unavailable");
-                return;
-            }
+            if (!sys) return;
 
             auto tasks = sys->GetQueueTasksWithMetadata();
-            if (tasks.empty()) {
-                ANI_LOG_DEBUG("QuickSave: queue is empty, nothing to save");
-                return;
-            }
+            if (tasks.empty()) return;
 
             std::filesystem::create_directories(dataPath);
             std::string filename = viewName + ".json";
@@ -512,13 +436,7 @@ namespace GUI {
             }
 
             std::ofstream file(filepath);
-            if (file.is_open()) {
-                file << j.dump(4);
-                ANI_LOG_DEBUG("QuickSave: saved %zu task(s) to %s", tasks.size(), filepath.c_str());
-            }
-            else {
-                ANI_LOG_ERROR("QuickSave: failed to open %s for writing", filepath.c_str());
-            }
+            if (file.is_open()) file << j.dump(4);
         }
         catch (const std::exception& e) {
             ANI_LOG_ERROR("QuickSave: exception: %s", e.what());
@@ -528,68 +446,38 @@ namespace GUI {
     void QueueView::QuickLoad() {
         try {
             auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
-            if (!ss) {
-                ANI_LOG_WARN("QuickLoad: SettingsSystem unavailable");
-                return;
-            }
-
+            if (!ss) return;
             std::string dataPath = ss->GetPath("ProjectDataPath");
-            if (dataPath.empty()) {
-                dataPath = ss->GetPath("DefaultProject");
-            }
-            if (dataPath.empty()) {
-                ANI_LOG_WARN("QuickLoad: no data path available");
-                return;
-            }
+            if (dataPath.empty()) dataPath = ss->GetPath("DefaultProject");
+            if (dataPath.empty()) return;
 
             std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
-
-            if (!std::filesystem::exists(filepath)) {
-                ANI_LOG_TRACE("QuickLoad: no saved file at %s", filepath.c_str());
-                return;
-            }
+            if (!std::filesystem::exists(filepath)) return;
 
             auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-            if (!sys) {
-                ANI_LOG_ERROR("QuickLoad: SDCPPSystem not available");
-                return;
-            }
+            if (!sys) return;
 
             std::ifstream file(filepath);
-            if (!file.is_open()) {
-                ANI_LOG_ERROR("QuickLoad: failed to open %s", filepath.c_str());
-                return;
-            }
+            if (!file.is_open()) return;
 
             nlohmann::json j;
             try { file >> j; }
             catch (const std::exception& e) {
-                ANI_LOG_ERROR("QuickLoad: JSON parse error in %s: %s", filepath.c_str(), e.what());
+                ANI_LOG_ERROR("QuickLoad: JSON parse error: %s", e.what());
                 return;
             }
-
-            if (!j.is_array()) {
-                ANI_LOG_ERROR("QuickLoad: invalid format (expected array) in %s", filepath.c_str());
-                return;
-            }
+            if (!j.is_array()) return;
 
             sys->ClearAllTasks();
-
             int loadedCount = 0;
             for (const auto& entry : j) {
-                if (!entry.contains("taskType") || !entry.contains("entityData")) {
-                    ANI_LOG_WARN("QuickLoad: skipping invalid entry (missing taskType or entityData)");
-                    continue;
-                }
+                if (!entry.contains("taskType") || !entry.contains("entityData")) continue;
                 int taskInt = entry["taskType"];
                 auto taskType = static_cast<ECS::SDCPPSystem::TaskType>(taskInt);
-                const auto& entityData = entry["entityData"];
-                sys->QueueTaskFromSerialized(entityData, taskType);
+                sys->QueueTaskFromSerialized(entry["entityData"], taskType);
                 loadedCount++;
             }
-
-            ANI_LOG_INFO("QuickLoad: loaded %d task(s) from %s", loadedCount, filepath.c_str());
             m_queueLoaded = true;
         }
         catch (const std::exception& e) {
@@ -599,9 +487,7 @@ namespace GUI {
 
     nlohmann::json QueueView::Serialize() const {
         nlohmann::json j;
-
         j["selectedViewIndex"] = m_selectedViewIndex;
-
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
         if (sys) {
             auto tasks = sys->GetQueueTasksWithMetadata();
@@ -618,19 +504,14 @@ namespace GUI {
     }
 
     void QueueView::Deserialize(const nlohmann::json& j) {
-        if (j.contains("selectedViewIndex")) {
+        if (j.contains("selectedViewIndex"))
             m_selectedViewIndex = j["selectedViewIndex"].get<int>();
-        }
 
         if (j.contains("queueData") && j["queueData"].is_array()) {
             auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-            if (!sys) {
-                ANI_LOG_ERROR("Deserialize: SDCPPSystem not available");
-                return;
-            }
+            if (!sys) return;
 
             if (sys->HasPendingWork()) {
-                ANI_LOG_WARN("Deserialize: pending work in flight; deferring queue load");
                 ANI::Events::Ref().QueueEvent("ClearAllDiffusionTasks");
             }
             else {
@@ -639,17 +520,12 @@ namespace GUI {
 
             int loadedCount = 0;
             for (const auto& entry : j["queueData"]) {
-                if (!entry.contains("taskType") || !entry.contains("entityData")) {
-                    ANI_LOG_WARN("Deserialize: skipping invalid queue entry (missing taskType or entityData)");
-                    continue;
-                }
+                if (!entry.contains("taskType") || !entry.contains("entityData")) continue;
                 int taskInt = entry["taskType"];
                 auto taskType = static_cast<ECS::SDCPPSystem::TaskType>(taskInt);
-                const auto& entityData = entry["entityData"];
-                sys->QueueTaskFromSerialized(entityData, taskType);
+                sys->QueueTaskFromSerialized(entry["entityData"], taskType);
                 loadedCount++;
             }
-            ANI_LOG_INFO("Deserialize: loaded %d task(s) from viewstate", loadedCount);
             m_queueLoaded = true;
         }
     }

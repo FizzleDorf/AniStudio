@@ -85,9 +85,6 @@ namespace GUI {
         void SaveSelectedMediaAsWithAudio();
         void SaveSelectedMediaAsNoAudio();
 
-        // Called on the main thread from VideoSystem once per displayed frame.
-        // Creates the TextureComponent on demand and hands the frame to
-        // TextureSystem for upload.
         void OnVideoFrame(ECS::EntityID entity, const uint8_t* data,
             int width, int height, int channels);
 

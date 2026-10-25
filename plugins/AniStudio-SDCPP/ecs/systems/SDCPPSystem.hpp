@@ -17,7 +17,6 @@
 #include "stable-diffusion.h"
 #include "ThreadPoolSystem.hpp"
 #include "SettingsSystem.hpp"
-#include "SettingsSystem.hpp"
 #include "ModelCacheSystem.hpp"
 
 #include <filesystem>
@@ -56,6 +55,7 @@ namespace ECS {
 
         struct TaskData {
             EntityID entityID = 0;
+            uint64_t entityGeneration = 0;
             bool processing = false;
             bool cancelled = false;
             TaskType taskType = TaskType::Inference;
@@ -63,9 +63,7 @@ namespace ECS {
             std::shared_ptr<SDCPP::ResourceManager> genRes;
             sd_img_gen_params_t imgParams{};
             sd_vid_gen_params_t vidParams{};
-
             sd_ctx_params_t convParams{};
-
             nlohmann::json metadataForWrite;
 
             std::string fullPath;
@@ -145,7 +143,8 @@ namespace ECS {
 
         std::vector<std::future<bool>> m_orphanedFutures;
         mutable std::mutex m_orphanMutex;
-        std::vector<EntityID> m_pendingDestroy;
+
+        std::vector<std::pair<EntityID, uint64_t>> m_pendingDestroy;
 
         std::vector<std::pair<void*, TaskCompletedCallback>> m_taskCompletedCallbacks;
 
@@ -190,7 +189,8 @@ namespace ECS {
 
         void ProcessQueues();
         void CheckTaskCompletion();
-        void ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID entityID);
+        void ProcessCompletedTask(const std::string& fullPath, TaskType taskType,
+            EntityID entityID, uint64_t entityGeneration);
         void WorkerThread();
     };
 

@@ -52,9 +52,7 @@ namespace ECS {
 			}
 		}
 
-		size_t Size() const {
-			return m_components.size();
-		}
+		size_t Size() const { return m_components.size(); }
 	};
 
 	bool EntityManager::IsPluginComponent(ComponentTypeID typeId) {
@@ -114,29 +112,16 @@ namespace ECS {
 
 		componentsArrays.clear();
 
-		// Slot 0 is reserved as the null handle. Freed IDs are handed
-		// back out by AddNewEntity() via m_freeEntityIDs.
 		while (!m_freeEntityIDs.empty()) m_freeEntityIDs.pop();
 		nextFreshID = 1;
 		entityCount = 0;
+
+		m_generations.assign(MAX_ENTITY_COUNT, 0);
 
 		ANI_LOG_INFO("EntityManager reset complete. Registered components preserved.");
 	}
 
 	const EntityID EntityManager::AddNewEntity() {
-		// Prefer a freed ID so we don't exhaust the space over a long
-		// session. Slot 0 is never handed out.
-		if (!m_freeEntityIDs.empty()) {
-			EntityID entity = m_freeEntityIDs.front();
-			m_freeEntityIDs.pop();
-
-			if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
-				AddEntitySignature(entity);
-				entityCount++;
-				return entity;
-			}
-		}
-
 		if (nextFreshID >= MAX_ENTITY_COUNT) {
 			ANI_LOG_ERROR("AddNewEntity: entity limit reached (%zu) ? live=%u free=%zu",
 				MAX_ENTITY_COUNT, (unsigned)entityCount, m_freeEntityIDs.size());
@@ -146,6 +131,7 @@ namespace ECS {
 		const EntityID entity = nextFreshID++;
 		AddEntitySignature(entity);
 		entityCount++;
+		if (entity < m_generations.size()) m_generations[entity]++;
 		return entity;
 	}
 
@@ -153,9 +139,7 @@ namespace ECS {
 		assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 		assert(entity != 0 && "Cannot destroy the null entity");
 
-		if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
-			return;
-		}
+		if (entitiesSignatures.find(entity) == entitiesSignatures.end()) return;
 
 		for (auto& [type, system] : registeredSystems) {
 			(void)type;
@@ -178,8 +162,9 @@ namespace ECS {
 		}
 
 		entityCount--;
-		m_freeEntityIDs.push(entity);
-		ANI_LOG_TRACE("Removed Entity: %u (freed %zu)", entity, m_freeEntityIDs.size());
+		if (entity < m_generations.size()) m_generations[entity]++;
+		ANI_LOG_TRACE("Removed Entity: %u (generation now %llu)",
+			entity, (unsigned long long)m_generations[entity]);
 	}
 
 	std::queue<EntityID> EntityManager::GetAvailableEntities() const {
@@ -195,60 +180,45 @@ namespace ECS {
 		auto it = entitiesSignatures.find(entityID);
 		if (it != entitiesSignatures.end()) {
 			it->second->erase(componentId);
-
 			auto arrayIt = componentsArrays.find(componentId);
 			if (arrayIt != componentsArrays.end()) {
 				arrayIt->second->Erase(entityID);
 			}
-
 			UpdateEntityTargetSystem(entityID);
 		}
 	}
 
 	void EntityManager::UnregisterPluginSystem(SystemTypeID systemId) {
 		auto it = pluginSystems.find(systemId);
-		if (it == pluginSystems.end()) {
-			return;
-		}
-
+		if (it == pluginSystems.end()) return;
 		PluginSystemInfo& systemInfo = it->second;
-
 		if (systemInfo.instance && systemInfo.destructor) {
 			ANI_LOG_DEBUG("Destroying plugin system ID: %u", systemId);
 			systemInfo.destructor(systemInfo.instance);
 		}
-
 		pluginSystems.erase(it);
 		ANI_LOG_INFO("Unregistered plugin system ID: %u", systemId);
 	}
 
 	void EntityManager::UnregisterPluginComponent(ComponentTypeID componentId) {
 		auto arrayIt = componentsArrays.find(componentId);
-		if (arrayIt != componentsArrays.end()) {
-			componentsArrays.erase(arrayIt);
-		}
-
+		if (arrayIt != componentsArrays.end()) componentsArrays.erase(arrayIt);
 		componentCreators.erase(componentId);
 		componentGetters.erase(componentId);
-
 		ANI_LOG_INFO("Unregistered plugin component ID: %u", componentId);
 	}
 
 	bool EntityManager::HasComponentById(const EntityID entity, ComponentTypeID componentId) {
 		assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 		auto it = entitiesSignatures.find(entity);
-		if (it == entitiesSignatures.end()) {
-			return false;
-		}
-		const EntitySignature& signature = *(it->second);
-		return (signature.count(componentId) > 0);
+		if (it == entitiesSignatures.end()) return false;
+		return (it->second->count(componentId) > 0);
 	}
 
 	std::vector<EntityID> EntityManager::GetAllEntities() const {
 		std::vector<EntityID> entities;
-		for (const auto& pair : entitiesSignatures) {
-			entities.push_back(pair.first);
-		}
+		entities.reserve(entitiesSignatures.size());
+		for (const auto& pair : entitiesSignatures) entities.push_back(pair.first);
 		return entities;
 	}
 
@@ -256,8 +226,7 @@ namespace ECS {
 		assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 		auto it = entitiesSignatures.find(entity);
 		if (it != entitiesSignatures.end()) {
-			const EntitySignature& signature = *(it->second);
-			return { signature.begin(), signature.end() };
+			return { it->second->begin(), it->second->end() };
 		}
 		return {};
 	}
@@ -274,9 +243,7 @@ namespace ECS {
 
 	std::vector<std::string> EntityManager::GetAllRegisteredComponentNames() const {
 		std::vector<std::string> names;
-		for (const auto& pair : m_componentNameToID) {
-			names.push_back(pair.first);
-		}
+		for (const auto& pair : m_componentNameToID) names.push_back(pair.first);
 		return names;
 	}
 
@@ -286,35 +253,40 @@ namespace ECS {
 
 	nlohmann::json EntityManager::SerializeEntity(const EntityID entity) const {
 		nlohmann::json entityJson;
-
 		entityJson["ID"] = entity;
 		entityJson["components"] = nlohmann::json::array();
 
-		auto componentTypes = GetEntityComponents(entity);
-
-		for (const auto& componentId : componentTypes) {
-			BaseComponent* baseComponent = const_cast<EntityManager*>(this)->GetComponentById(entity, componentId);
+		for (const auto& componentId : GetEntityComponents(entity)) {
+			BaseComponent* baseComponent =
+				const_cast<EntityManager*>(this)->GetComponentById(entity, componentId);
 
 			if (baseComponent) {
 				nlohmann::json componentJson;
 				std::string componentName = GetComponentNameById(componentId);
-
 				if (componentName != "Unknown") {
 					nlohmann::json serialized = baseComponent->Serialize();
-
 					if (serialized.contains(componentName)) {
 						componentJson[componentName] = serialized[componentName];
 					}
 					else {
 						componentJson[componentName] = serialized;
 					}
-
 					entityJson["components"].push_back(componentJson);
 				}
 			}
 		}
-
 		return entityJson;
+	}
+
+	void EntityManager::RegisterEntityClonedCallback(void* owner, EntityClonedCallback cb) {
+		m_entityClonedCallbacks.emplace_back(owner, std::move(cb));
+	}
+
+	void EntityManager::UnregisterCallbacksForOwner(void* owner) {
+		m_entityClonedCallbacks.erase(
+			std::remove_if(m_entityClonedCallbacks.begin(), m_entityClonedCallbacks.end(),
+				[owner](const auto& p) { return p.first == owner; }),
+			m_entityClonedCallbacks.end());
 	}
 
 	EntityID EntityManager::CloneEntity(const EntityID sourceEntity) {
@@ -324,24 +296,27 @@ namespace ECS {
 		}
 
 		EntityID newEntity = AddNewEntity();
-
 		auto componentTypes = GetEntityComponents(sourceEntity);
 
 		try {
 			for (const auto& componentId : componentTypes) {
 				auto creator = componentCreators.find(componentId);
-				if (creator != componentCreators.end()) {
-					creator->second(newEntity);
+				if (creator == componentCreators.end()) continue;
 
-					if (auto* sourceComponent = GetComponentById(sourceEntity, componentId)) {
-						if (auto* destComponent = GetComponentById(newEntity, componentId)) {
-							nlohmann::json componentData = sourceComponent->Serialize();
-							destComponent->Deserialize(componentData);
-							destComponent->entityID = newEntity;
-							CopyComponentResources(sourceEntity, newEntity, componentId);
-						}
-					}
-				}
+				creator->second(newEntity);
+
+				BaseComponent* sourceComponent = GetComponentById(sourceEntity, componentId);
+				BaseComponent* destComponent = GetComponentById(newEntity, componentId);
+				if (!sourceComponent || !destComponent) continue;
+
+				nlohmann::json componentData = sourceComponent->Serialize();
+				destComponent->Deserialize(componentData);
+				destComponent->entityID = newEntity;
+			}
+
+			for (auto& [owner, cb] : m_entityClonedCallbacks) {
+				(void)owner;
+				if (cb) { try { cb(sourceEntity, newEntity); } catch (...) {} }
 			}
 
 			ANI_LOG_INFO("Successfully cloned entity %u to %u", sourceEntity, newEntity);
@@ -368,33 +343,25 @@ namespace ECS {
 					std::string componentName = it.key();
 					ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
 
-					ANI_LOG_TRACE("[Deserialize] key='%s' -> typeId=%u -> registeredName='%s'",
-						componentName.c_str(), typeId, GetComponentNameById(typeId).c_str());
-
 					if (typeId != MAX_COMPONENT_COUNT) {
 						auto creator = componentCreators.find(typeId);
 						if (creator != componentCreators.end()) {
 							creator->second(entity);
-
 							BaseComponent* component = GetComponentById(entity, typeId);
-
 							if (component) {
 								component->Deserialize(componentJson[componentName]);
 								component->entityID = entity;
 							}
-							else {
-								ANI_LOG_ERROR("[Deserialize] ERROR: Component %s was not created!", componentName.c_str());
-							}
 						}
-						else {
-							ANI_LOG_WARN("[Deserialize] No creator for component: %s", componentName.c_str());
-						}
-					}
-					else {
-						ANI_LOG_WARN("[Deserialize] Component not found: %s", componentName.c_str());
 					}
 				}
 			}
+
+			for (auto& [owner, cb] : m_entityClonedCallbacks) {
+				(void)owner;
+				if (cb) { try { cb(entity, entity); } catch (...) {} }
+			}
+
 			return entity;
 		}
 		catch (const std::exception& e) {
@@ -409,7 +376,6 @@ namespace ECS {
 			ANI_LOG_ERROR("Error: Cannot deserialize to invalid entity %u", entity);
 			return;
 		}
-
 		if (!json.contains("components") || !json["components"].is_array()) {
 			ANI_LOG_ERROR("Error: Invalid entity data format in JSON");
 			return;
@@ -420,20 +386,21 @@ namespace ECS {
 				for (auto it = componentJson.begin(); it != componentJson.end(); ++it) {
 					std::string componentName = it.key();
 					ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
-					if (typeId != MAX_COMPONENT_COUNT) {
-						if (!HasComponentById(entity, typeId)) {
-							auto creator = componentCreators.find(typeId);
-							if (creator != componentCreators.end()) {
-								creator->second(entity);
-							}
-						}
-
-						if (auto* component = GetComponentById(entity, typeId)) {
-							component->Deserialize(componentJson[componentName]);
-							component->entityID = entity;
-						}
+					if (typeId == MAX_COMPONENT_COUNT) continue;
+					if (!HasComponentById(entity, typeId)) {
+						auto creator = componentCreators.find(typeId);
+						if (creator != componentCreators.end()) creator->second(entity);
+					}
+					if (auto* component = GetComponentById(entity, typeId)) {
+						component->Deserialize(componentJson[componentName]);
+						component->entityID = entity;
 					}
 				}
+			}
+
+			for (auto& [owner, cb] : m_entityClonedCallbacks) {
+				(void)owner;
+				if (cb) { try { cb(entity, entity); } catch (...) {} }
 			}
 		}
 		catch (const std::exception& e) {
@@ -441,7 +408,8 @@ namespace ECS {
 		}
 	}
 
-	void EntityManager::RegisterComponentType(ComponentTypeID typeId, ComponentCreator creator, ComponentGetter getter) {
+	void EntityManager::RegisterComponentType(ComponentTypeID typeId,
+		ComponentCreator creator, ComponentGetter getter) {
 		componentCreators[typeId] = creator;
 		componentGetters[typeId] = getter;
 	}
@@ -450,10 +418,8 @@ namespace ECS {
 		size_t componentSize,
 		std::function<void(void*, EntityID)> constructor,
 		std::function<void(void*)> destructor) {
-
 		auto pluginArray = std::make_shared<PluginComponentArray>(componentSize, constructor, destructor);
 		componentsArrays[typeId] = pluginArray;
-
 		RegisterComponentType(
 			typeId,
 			[this, typeId, pluginArray](EntityID entity) {
@@ -461,13 +427,9 @@ namespace ECS {
 				pluginArray->Insert(entity);
 				UpdateEntityTargetSystem(entity);
 			},
-			[pluginArray](EntityID entity) -> BaseComponent* {
-				return nullptr;
-			}
+			[pluginArray](EntityID) -> BaseComponent* { return nullptr; }
 		);
-
-		ANI_LOG_INFO("Registered plugin component with ID: %u (size: %zu bytes)",
-			typeId, componentSize);
+		ANI_LOG_INFO("Registered plugin component with ID: %u (size: %zu bytes)", typeId, componentSize);
 	}
 
 	template<typename T>
@@ -478,55 +440,33 @@ namespace ECS {
 			ANI_LOG_WARN("Component type not registered: %s", typeid(T).name());
 			return;
 		}
-
-		ComponentTypeID typeId = it->second;
-		UnregisterComponentById(typeId);
+		UnregisterComponentById(it->second);
 	}
 
 	void EntityManager::UnregisterComponentByName(const std::string& name) {
 		ComponentTypeID typeId = GetComponentTypeIdByName(name);
-		if (typeId != MAX_COMPONENT_COUNT) {
-			UnregisterComponentById(typeId);
-		}
-		else {
-			ANI_LOG_WARN("Component name not found: %s", name.c_str());
-		}
+		if (typeId != MAX_COMPONENT_COUNT) UnregisterComponentById(typeId);
+		else ANI_LOG_WARN("Component name not found: %s", name.c_str());
 	}
 
 	void EntityManager::UnregisterComponentById(ComponentTypeID typeId) {
 		ANI_LOG_INFO("Unregistering component ID: %u", typeId);
-
 		RemoveComponentFromAllEntities(typeId);
-
 		auto arrayIt = componentsArrays.find(typeId);
-		if (arrayIt != componentsArrays.end()) {
-			componentsArrays.erase(arrayIt);
-		}
-
+		if (arrayIt != componentsArrays.end()) componentsArrays.erase(arrayIt);
 		componentCreators.erase(typeId);
 		componentGetters.erase(typeId);
-
 		std::string componentName;
-
 		auto idToNameIt = m_componentIDToName.find(typeId);
 		if (idToNameIt != m_componentIDToName.end()) {
 			componentName = idToNameIt->second;
 			m_componentIDToName.erase(idToNameIt);
 		}
-
-		if (!componentName.empty()) {
-			m_componentNameToID.erase(componentName);
+		if (!componentName.empty()) m_componentNameToID.erase(componentName);
+		for (auto it = m_componentTypeToID.begin(); it != m_componentTypeToID.end();) {
+			if (it->second == typeId) it = m_componentTypeToID.erase(it);
+			else ++it;
 		}
-
-		for (auto it = m_componentTypeToID.begin(); it != m_componentTypeToID.end(); ) {
-			if (it->second == typeId) {
-				it = m_componentTypeToID.erase(it);
-			}
-			else {
-				++it;
-			}
-		}
-
 		ANI_LOG_INFO("Successfully unregistered component ID: %u", typeId);
 	}
 
@@ -534,11 +474,8 @@ namespace ECS {
 		for (auto& [entityId, signature] : entitiesSignatures) {
 			if (signature->count(typeId) > 0) {
 				signature->erase(typeId);
-
 				auto arrayIt = componentsArrays.find(typeId);
-				if (arrayIt != componentsArrays.end()) {
-					arrayIt->second->Erase(entityId);
-				}
+				if (arrayIt != componentsArrays.end()) arrayIt->second->Erase(entityId);
 			}
 		}
 	}
@@ -547,9 +484,7 @@ namespace ECS {
 		auto arrayIt = componentsArrays.find(typeId);
 		if (arrayIt != componentsArrays.end()) {
 			auto pluginArray = std::dynamic_pointer_cast<PluginComponentArray>(arrayIt->second);
-			if (pluginArray) {
-				return pluginArray->Get(entity);
-			}
+			if (pluginArray) return pluginArray->Get(entity);
 		}
 		return nullptr;
 	}
@@ -562,9 +497,6 @@ namespace ECS {
 				GetEntitySignature(entity)->insert(typeId);
 				void* component = pluginArray->Insert(entity);
 				UpdateEntityTargetSystem(entity);
-
-				ANI_LOG_TRACE("Added plugin component to entity %u with type ID: %u",
-					entity, typeId);
 				return component;
 			}
 		}
@@ -575,16 +507,9 @@ namespace ECS {
 		auto it = entitiesSignatures.find(entity);
 		if (it != entitiesSignatures.end()) {
 			it->second->erase(typeId);
-
 			auto arrayIt = componentsArrays.find(typeId);
-			if (arrayIt != componentsArrays.end()) {
-				arrayIt->second->Erase(entity);
-			}
-
+			if (arrayIt != componentsArrays.end()) arrayIt->second->Erase(entity);
 			UpdateEntityTargetSystem(entity);
-
-			ANI_LOG_TRACE("Removed plugin component from entity %u with type ID: %u",
-				entity, typeId);
 		}
 	}
 
@@ -599,16 +524,11 @@ namespace ECS {
 		std::function<void(void*)> starter,
 		const std::vector<ComponentTypeID>& requiredComponents) {
 
-		ANI_LOG_INFO("Registering plugin system ID: %u with %zu required components",
-			typeId, requiredComponents.size());
-
 		void* systemInstance = creator(this);
 		if (!systemInstance) {
 			ANI_LOG_ERROR("Failed to create plugin system with ID: %u", typeId);
 			return;
 		}
-
-		ANI_LOG_DEBUG("Plugin system instance created successfully");
 
 		PluginSystemInfo systemInfo;
 		systemInfo.instance = systemInstance;
@@ -620,26 +540,13 @@ namespace ECS {
 		for (const auto& [entityId, entitySignature] : entitiesSignatures) {
 			bool matches = true;
 			for (ComponentTypeID compType : requiredComponents) {
-				if (entitySignature->count(compType) == 0) {
-					matches = false;
-					break;
-				}
+				if (entitySignature->count(compType) == 0) { matches = false; break; }
 			}
-			if (matches) {
-				systemInfo.entities.insert(entityId);
-				matchingEntities++;
-			}
+			if (matches) { systemInfo.entities.insert(entityId); matchingEntities++; }
 		}
 
 		pluginSystems[typeId] = std::move(systemInfo);
-
-		ANI_LOG_DEBUG("Plugin system stored with ID: %u", typeId);
-
-		if (starter) {
-			ANI_LOG_DEBUG("Starting plugin system...");
-			starter(systemInstance);
-		}
-
+		if (starter) starter(systemInstance);
 		ANI_LOG_INFO("Registered plugin system with ID: %u requiring %zu components with %d initial entities",
 			typeId, requiredComponents.size(), matchingEntities);
 	}
@@ -657,26 +564,21 @@ namespace ECS {
 		}
 	}
 
-	EntityID EntityManager::GetEntityCount() const {
-		return entityCount;
-	}
+	EntityID EntityManager::GetEntityCount() const { return entityCount; }
 
 	const std::map<EntityID, std::shared_ptr<EntitySignature>>& EntityManager::GetEntitiesSignatures() const {
 		return entitiesSignatures;
 	}
-
 	const std::map<SystemTypeID, std::shared_ptr<BaseSystem>>& EntityManager::GetRegisteredSystems() const {
 		return registeredSystems;
 	}
-
 	const std::map<ComponentTypeID, std::shared_ptr<ICompList>>& EntityManager::GetComponentsArrays() const {
 		return componentsArrays;
 	}
 
 	void EntityManager::DebugPrintRegisteredComponents() const {
 		ANI_LOG_DEBUG("Registered Component Types:");
-		auto names = GetAllRegisteredComponentNames();
-		for (const auto& name : names) {
+		for (const auto& name : GetAllRegisteredComponentNames()) {
 			ComponentTypeID id = GetComponentTypeIdByName(name);
 			ANI_LOG_DEBUG("  - %s (ID: %u)", name.c_str(), id);
 		}
@@ -685,15 +587,13 @@ namespace ECS {
 	void EntityManager::DebugPrintEntityComponents(EntityID entity) const {
 		ANI_LOG_DEBUG("Entity %u raw components (%zu):", entity, GetEntityComponents(entity).size());
 		for (const auto& compId : GetEntityComponents(entity)) {
-			std::string name = GetComponentNameById(compId);
-			ANI_LOG_DEBUG("  - ID: %u (%s)", compId, name.c_str());
+			ANI_LOG_DEBUG("  - ID: %u (%s)", compId, GetComponentNameById(compId).c_str());
 		}
 	}
 
 	void EntityManager::DebugPrintPluginSystems() const {
 		ANI_LOG_DEBUG("=== PLUGIN SYSTEMS DEBUG ===");
 		ANI_LOG_DEBUG("Total plugin systems registered: %zu", pluginSystems.size());
-
 		for (const auto& [systemId, systemInfo] : pluginSystems) {
 			auto nameIt = m_systemIDToName.find(systemId);
 			std::string systemName = (nameIt != m_systemIDToName.end()) ? nameIt->second : "Unknown";
@@ -701,8 +601,7 @@ namespace ECS {
 			ANI_LOG_DEBUG("  Instance: %p", systemInfo.instance);
 			ANI_LOG_DEBUG("  Required components: %zu", systemInfo.requiredComponents.size());
 			for (ComponentTypeID compId : systemInfo.requiredComponents) {
-				ANI_LOG_DEBUG("    - %s (ID: %u)",
-					GetComponentNameById(compId).c_str(), compId);
+				ANI_LOG_DEBUG("    - %s (ID: %u)", GetComponentNameById(compId).c_str(), compId);
 			}
 			ANI_LOG_DEBUG("  Entities: %zu", systemInfo.entities.size());
 		}
@@ -711,19 +610,13 @@ namespace ECS {
 
 	void EntityManager::AddEntitySignature(const EntityID entity) {
 		auto it = entitiesSignatures.find(entity);
-		if (it != entitiesSignatures.end()) {
-			it->second->clear();
-		}
-		else {
-			entitiesSignatures[entity] = std::make_shared<EntitySignature>();
-		}
+		if (it != entitiesSignatures.end()) it->second->clear();
+		else entitiesSignatures[entity] = std::make_shared<EntitySignature>();
 	}
 
 	std::shared_ptr<EntitySignature> EntityManager::GetEntitySignature(const EntityID entity) {
 		auto it = entitiesSignatures.find(entity);
-		if (it == entitiesSignatures.end()) {
-			AddEntitySignature(entity);
-		}
+		if (it == entitiesSignatures.end()) AddEntitySignature(entity);
 		return entitiesSignatures.at(entity);
 	}
 
@@ -741,34 +634,18 @@ namespace ECS {
 		for (auto& [systemId, systemInfo] : pluginSystems) {
 			bool matches = true;
 			for (ComponentTypeID compType : systemInfo.requiredComponents) {
-				if (entitySignature->count(compType) == 0) {
-					matches = false;
-					break;
-				}
+				if (entitySignature->count(compType) == 0) { matches = false; break; }
 			}
-
-			if (matches) {
-				if (systemInfo.entities.insert(entity).second) {
-					ANI_LOG_TRACE("Added entity %u to plugin system %u",
-						entity, systemId);
-				}
-			}
-			else {
-				systemInfo.entities.erase(entity);
-			}
+			if (matches) systemInfo.entities.insert(entity);
+			else systemInfo.entities.erase(entity);
 		}
 	}
 
 	bool EntityManager::IsEntityInSystem(const EntityID entity, const EntitySignature& system_signature) {
 		auto entitySigIt = entitiesSignatures.find(entity);
-		if (entitySigIt == entitiesSignatures.end()) {
-			return false;
-		}
-
+		if (entitySigIt == entitiesSignatures.end()) return false;
 		for (const auto compType : system_signature) {
-			if (entitySigIt->second->count(compType) == 0) {
-				return false;
-			}
+			if (entitySigIt->second->count(compType) == 0) return false;
 		}
 		return true;
 	}
@@ -787,15 +664,6 @@ namespace ECS {
 			return getter->second(entity);
 		}
 		return nullptr;
-	}
-
-	void EntityManager::CopyComponentResources(EntityID sourceEntity, EntityID destEntity, ComponentTypeID componentId) {
-		std::string componentName = GetComponentNameById(componentId);
-
-		if (componentName == "InputImage" || componentName == "Image") {
-			auto sourceComp = GetComponentById(sourceEntity, componentId);
-			auto destComp = GetComponentById(destEntity, componentId);
-		}
 	}
 
 } // namespace ECS

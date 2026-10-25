@@ -364,6 +364,7 @@ namespace GUI {
                 if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
                     GUI::Thumbnail::RenderListRow(
                         compVariant,
+                        entityID,
                         i,
                         thumbnailSizePx,
                         [this](ECS::EntityID id) { SelectAssetEntity(id); },
@@ -376,6 +377,7 @@ namespace GUI {
                 else {
                     GUI::Thumbnail::RenderThumbnail(
                         compVariant,
+                        entityID,
                         i,
                         thumbnailSizePx,
                         filterSettings.displayMode,

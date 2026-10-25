@@ -1,6 +1,7 @@
 #include "ThumbnailUtils.hpp"
 #include "DragDropUtils.hpp"
 #include "TextureComponent.hpp"
+#include "TextureSystem.hpp"
 #include "IconFonts.hpp"
 #include <imgui.h>
 #include <chrono>
@@ -98,8 +99,16 @@ namespace GUI {
         static GLuint GetEntityTextureID(ECS::EntityManager* entityManager, ECS::EntityID entityID) {
             if (!entityManager) return 0;
             if (!entityManager->IsEntityValid(entityID)) return 0;
-            if (!entityManager->HasComponent<ECS::TextureComponent>(entityID)) return 0;
-            return entityManager->GetComponent<ECS::TextureComponent>(entityID).textureID;
+
+            auto texSys = entityManager->GetSystem<ECS::TextureSystem>();
+            if (!texSys) return 0;
+
+            GLuint tex = texSys->GetTextureID(entityID);
+            if (tex == 0) {
+                texSys->EnsureTextureForEntity(entityID);
+                tex = texSys->GetTextureID(entityID);
+            }
+            return tex;
         }
 
         static bool EntityHasVideo(ECS::EntityManager* mgr, ECS::EntityID id) {
@@ -196,7 +205,6 @@ namespace GUI {
             ImGui::TextColored(color, "%s", value.c_str());
         }
 
-        // Compute an aspect-correct size that fits inside a square box.
         static ImVec2 FitAspect(int width, int height, float boxSize) {
             float aspect = (height > 0) ? (float)width / (float)height : 1.0f;
             ImVec2 size(boxSize, boxSize);
@@ -205,21 +213,9 @@ namespace GUI {
             return size;
         }
 
-        // ---------------------------------------------------------------------
-        // List mode
-        //
-        // Row layout: [expand arrow] [small thumbnail] [type icon] [filename]
-        //
-        // The inline thumbnail and icon are drawn at a fixed small size so the
-        // row stays compact and the tree layout is not disturbed, regardless of
-        // the configured thumbnail size setting.
-        //
-        // Hovering the row shows a tooltip containing the full image rendered
-        // at the configured thumbnail size. Expanding the node renders the same
-        // image at the configured size followed by metadata details.
-        // ---------------------------------------------------------------------
         void RenderListRow(
             const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
+            ECS::EntityID entityID,
             size_t index,
             float thumbnailSize,
             std::function<void(ECS::EntityID)> onSelect,
@@ -255,7 +251,6 @@ namespace GUI {
             if (isAudio && !IsAudioLoaded(aud)) return;
 
             std::string filePath, fileName;
-            ECS::EntityID entityID = 0;
             GLuint textureID = 0;
             int width = 0, height = 0, channels = 0;
             uint64_t fileSize = 0;
@@ -268,7 +263,6 @@ namespace GUI {
             if (isImage) {
                 filePath = img->filePath;
                 fileName = img->fileName;
-                entityID = img->GetID();
                 textureID = GetEntityTextureID(entityManager, entityID);
                 width = img->width;
                 height = img->height;
@@ -283,7 +277,6 @@ namespace GUI {
             else if (isVideo) {
                 filePath = vid->filePath;
                 fileName = vid->fileName;
-                entityID = vid->GetID();
                 textureID = GetEntityTextureID(entityManager, entityID);
                 width = vid->width;
                 height = vid->height;
@@ -300,7 +293,6 @@ namespace GUI {
             else if (isAudio) {
                 filePath = aud->filePath;
                 fileName = aud->fileName;
-                entityID = aud->GetID();
                 channels = aud->channels;
                 sampleRate = aud->sampleRate;
                 duration = aud->duration;
@@ -330,19 +322,13 @@ namespace GUI {
                 flags |= ImGuiTreeNodeFlags_Leaf;
             }
 
-            // Inline cell size is FIXED and small so the tree row stays
-            // compact. The configured thumbnail size is only used for the
-            // tooltip and the expanded dropdown image.
             const float lineHeight = ImGui::GetTextLineHeight();
-            const float cellSize = lineHeight + 8.0f;   // small inline box
+            const float cellSize = lineHeight + 8.0f;
 
             ImVec2 rowStart = ImGui::GetCursorScreenPos();
 
-            // Draw the tree node. We don't use its label; contents are drawn
-            // manually below on the same line.
             bool nodeOpen = ImGui::TreeNodeEx("##node", flags, "%s", "");
 
-            // Row background for hover/selection.
             bool itemHovered = ImGui::IsItemHovered();
             bool itemActive = (entityID == activeEntityID && entityID != 0);
             if (itemActive || itemHovered) {
@@ -400,11 +386,8 @@ namespace GUI {
                 ImGui::EndPopup();
             }
 
-            // Shift past the tree arrow to start drawing row contents.
             ImGui::SameLine();
 
-            // 1. Small inline thumbnail (fixed size, does not scale with the
-            //    thumbnail size setting so the tree stays compact).
             ImVec2 thumbMin = ImGui::GetCursorScreenPos();
             ImVec2 thumbMax = ImVec2(thumbMin.x + cellSize, thumbMin.y + cellSize);
 
@@ -430,7 +413,6 @@ namespace GUI {
                     thumbMin, thumbMax, IM_COL32(60, 60, 80, 200), 3.0f);
             }
 
-            // 2. Media type icon (fixed size).
             ImGui::SetCursorScreenPos(ImVec2(thumbMax.x + 6.0f, thumbMin.y));
             ImVec2 iconMin = ImGui::GetCursorScreenPos();
             ImVec2 iconMax = ImVec2(iconMin.x + cellSize, iconMin.y + cellSize);
@@ -451,11 +433,9 @@ namespace GUI {
                 }
             }
 
-            // 3. Filename.
             ImGui::SetCursorScreenPos(ImVec2(iconMax.x + 6.0f, iconMin.y));
             ImGui::TextUnformatted(fileName.c_str());
 
-            // Tooltip on hover: metadata + the image at the configured size.
             if (ImGui::IsItemHovered()) {
                 ImGui::BeginTooltip();
                 ImGui::Text("File: %s", fileName.c_str());
@@ -494,7 +474,6 @@ namespace GUI {
                     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "LSB Metadata");
                 }
 
-                // Show the image at the configured thumbnail size setting.
                 if (textureID != 0 && width > 0 && height > 0) {
                     ImVec2 previewDims = FitAspect(width, height, thumbnailSize);
                     ImGui::Image((ImTextureID)(intptr_t)textureID, previewDims);
@@ -506,7 +485,6 @@ namespace GUI {
             if (nodeOpen) {
                 ImGui::Indent(cellSize * 2.0f + 12.0f);
 
-                // Expanded dropdown: the image at the configured thumbnail size.
                 if (textureID != 0 && width > 0 && height > 0) {
                     ImVec2 previewDims = FitAspect(width, height, thumbnailSize);
                     ImGui::Image((ImTextureID)(intptr_t)textureID, previewDims);
@@ -571,6 +549,7 @@ namespace GUI {
 
         void RenderThumbnail(
             const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
+            ECS::EntityID entityID,
             size_t index,
             float thumbnailSize,
             DisplayMode mode,
@@ -607,7 +586,6 @@ namespace GUI {
             if (isAudio && !IsAudioLoaded(aud)) return;
 
             std::string filePath, fileName;
-            ECS::EntityID entityID = 0;
             GLuint textureID = 0;
             int width = 0, height = 0, channels = 0;
             uint64_t fileSize = 0;
@@ -620,7 +598,6 @@ namespace GUI {
             if (isImage) {
                 filePath = img->filePath;
                 fileName = img->fileName;
-                entityID = img->GetID();
                 textureID = GetEntityTextureID(entityManager, entityID);
                 width = img->width;
                 height = img->height;
@@ -635,7 +612,6 @@ namespace GUI {
             else if (isVideo) {
                 filePath = vid->filePath;
                 fileName = vid->fileName;
-                entityID = vid->GetID();
                 textureID = GetEntityTextureID(entityManager, entityID);
                 width = vid->width;
                 height = vid->height;
@@ -652,7 +628,6 @@ namespace GUI {
             else if (isAudio) {
                 filePath = aud->filePath;
                 fileName = aud->fileName;
-                entityID = aud->GetID();
                 channels = aud->channels;
                 sampleRate = aud->sampleRate;
                 duration = aud->duration;
@@ -806,10 +781,6 @@ namespace GUI {
                 (void)cellWidth;
             }
             else if (mode == DisplayMode::Detailed) {
-                // -----------------------------------------------------------------
-                // Detailed mode: bordered card with the thumbnail on the left and
-                // a scrollable metadata block on the right.
-                // -----------------------------------------------------------------
                 const float imageSize = thumbnailSize - 10.0f;
                 const float pad = 6.0f;
                 const float infoWidth = 190.0f;
@@ -893,7 +864,6 @@ namespace GUI {
 
                 DrawTypeBadges(entityManager, entityID, thumbMin);
 
-                // Info block on the right, inside a scrollable child region.
                 float textX = thumbMax.x + pad;
                 float infoHeight = imageSize;
                 float infoWidthAvail = cardMax.x - textX - pad;

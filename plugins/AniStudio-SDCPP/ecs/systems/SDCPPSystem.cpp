@@ -112,8 +112,6 @@ namespace ECS {
 
     void SDCPPSystem::NotifyTaskCompleted(TaskType taskType, EntityID entityID,
         const std::string& fullPath) {
-        // Copy the callback list under the lock, then invoke outside it so a
-        // subscriber can safely call back into SDCPPSystem if it wants to.
         std::vector<TaskCompletedCallback> cbs;
         {
             std::lock_guard<std::mutex> lock(queueMutex);
@@ -142,9 +140,6 @@ namespace ECS {
             if (mgr.IsEntityValid(settingsEntity) &&
                 mgr.HasComponent<SDCPPSettingsComponent>(settingsEntity)) {
 
-                // IMPORTANT: do not hold a reference to globalSettings across
-                // AddComponent<> below. AddComponent can reallocate component
-                // storage and invalidate any outstanding references.
                 nlohmann::json globalSettingsJson =
                     mgr.GetComponent<SDCPPSettingsComponent>(settingsEntity).Serialize();
 
@@ -171,6 +166,7 @@ namespace ECS {
 
         TaskData task;
         task.entityID = entityID;
+        task.entityGeneration = mgr.GetEntityGeneration(entityID);
         task.taskType = taskType;
         task.enqueueTime = std::chrono::steady_clock::now();
         task.genRes = std::make_shared<SDCPP::ResourceManager>();
@@ -275,11 +271,7 @@ namespace ECS {
     void SDCPPSystem::Update(float deltaT) {
         if (shuttingDown) return;
 
-        // Destroy task entities that completed in a previous frame, before
-        // anything else on this frame can hold an iterator into the entity
-        // table or a reference into component storage.
         DrainPendingDestroy();
-
         DrainOrphanedFutures();
 
         if (clearRequested) {
@@ -291,7 +283,7 @@ namespace ECS {
     }
 
     void SDCPPSystem::DrainPendingDestroy() {
-        std::vector<EntityID> toDestroy;
+        std::vector<std::pair<EntityID, uint64_t>> toDestroy;
         {
             std::lock_guard<std::mutex> lock(queueMutex);
             toDestroy.swap(m_pendingDestroy);
@@ -299,12 +291,19 @@ namespace ECS {
 
         auto imgSys = mgr.GetSystem<ImageSystem>();
 
-        for (EntityID e : toDestroy) {
+        for (auto& [e, gen] : toDestroy) {
             if (!mgr.IsEntityValid(e)) continue;
+
+            if (mgr.GetEntityGeneration(e) != gen) {
+                ANI_LOG_WARN("DrainPendingDestroy: skipping entity %u; generation changed from %llu to %llu",
+                    e, (unsigned long long)gen,
+                    (unsigned long long)mgr.GetEntityGeneration(e));
+                continue;
+            }
 
             if (imgSys && imgSys->IsEntityPendingLoad(e)) {
                 std::lock_guard<std::mutex> lock(queueMutex);
-                m_pendingDestroy.push_back(e);
+                m_pendingDestroy.emplace_back(e, gen);
                 continue;
             }
 
@@ -565,7 +564,6 @@ namespace ECS {
         const std::string& fullPath,
         sd_ctx_t* context)
     {
-
         const uint64_t token = GUI::DiffusionCallbackUtils::BeginGeneration();
 
         sd_image_t* images = nullptr;
@@ -778,10 +776,6 @@ namespace ECS {
             }
         }
 
-        // Snapshot the head task outside the lock so filesystem calls
-        // (ResolveFullPathForTask) do not run while queueMutex is held.
-        // Any callback that wants to inspect the queue from inside the
-        // filesystem call will not deadlock on queueMutex.
         std::string resolvedPath;
         EntityID headEntity = 0;
         {
@@ -802,14 +796,11 @@ namespace ECS {
         }
 
         if (headEntity != 0 && resolvedPath.empty()) {
-            // Resolve outside the lock.
             TaskData snapshot;
             {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 for (auto& t : taskQueue) {
                     if (!t.processing && t.entityID == headEntity) {
-                        // Make a shallow snapshot for path resolution. We only
-                        // need entityID and taskType for ResolveFullPathForTask.
                         snapshot.entityID = t.entityID;
                         snapshot.taskType = t.taskType;
                         break;
@@ -936,7 +927,7 @@ namespace ECS {
 
     void SDCPPSystem::CheckTaskCompletion() {
         if (taskQueue.empty()) return;
-        std::vector<std::tuple<std::string, TaskType, EntityID>> completedTasks;
+        std::vector<std::tuple<std::string, TaskType, EntityID, uint64_t>> completedTasks;
         {
             std::unique_lock<std::mutex> lock(queueMutex);
             const auto now = std::chrono::steady_clock::now();
@@ -972,7 +963,8 @@ namespace ECS {
                         m_orphanedFutures.push_back(std::move(it->result));
                     }
                     else if (success && std::filesystem::exists(it->fullPath)) {
-                        completedTasks.emplace_back(it->fullPath, it->taskType, it->entityID);
+                        completedTasks.emplace_back(it->fullPath, it->taskType,
+                            it->entityID, it->entityGeneration);
                     }
                     else if (!orphanFuture) {
                         bool exists = std::filesystem::exists(it->fullPath);
@@ -995,51 +987,40 @@ namespace ECS {
                 activeThreadId = std::thread::id{};
         }
         if (!shuttingDown) {
-            for (const auto& [path, type, id] : completedTasks)
-                ProcessCompletedTask(path, type, id);
+            for (const auto& [path, type, id, gen] : completedTasks)
+                ProcessCompletedTask(path, type, id, gen);
         }
     }
 
     void SDCPPSystem::ProcessCompletedTask(const std::string& fullPath,
         TaskType taskType,
-        EntityID entityID)
+        EntityID entityID,
+        uint64_t entityGeneration)
     {
         try {
             bool exists = std::filesystem::exists(fullPath);
 
             if (!shuttingDown && exists) {
+                EntityID newMediaEntity = mgr.AddNewEntity();
 
                 if (IsVideoTask(taskType)) {
                     if (LoadVideoWithAudio(fullPath) == 0) {
-                        EntityID e = mgr.AddNewEntity();
-                        LoadVideoViaVideoSystem(e, fullPath);
+                        LoadVideoViaVideoSystem(newMediaEntity, fullPath);
                     }
                 }
                 else {
-                    EntityID e = mgr.AddNewEntity();
-                    LoadImageViaImageSystem(e, fullPath);
+                    LoadImageViaImageSystem(newMediaEntity, fullPath);
                 }
 
                 NotifyTaskCompleted(taskType, entityID, fullPath);
 
-                if (mgr.IsEntityValid(entityID)) {
+                if (mgr.IsEntityValid(entityID) && mgr.GetEntityGeneration(entityID) == entityGeneration) {
                     std::lock_guard<std::mutex> lock(queueMutex);
-                    m_pendingDestroy.push_back(entityID);
+                    m_pendingDestroy.emplace_back(entityID, entityGeneration);
                 }
             }
             else if (exists) {
                 std::filesystem::remove(fullPath);
-                if (mgr.IsEntityValid(entityID)) {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    m_pendingDestroy.push_back(entityID);
-                }
-            }
-            else {
-                NotifyTaskCompleted(taskType, entityID, fullPath);
-                if (mgr.IsEntityValid(entityID)) {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    m_pendingDestroy.push_back(entityID);
-                }
             }
         }
         catch (const std::exception& e) {
@@ -1048,10 +1029,6 @@ namespace ECS {
             std::error_code ec;
             if (std::filesystem::exists(fullPath, ec))
                 std::filesystem::remove(fullPath, ec);
-            if (mgr.IsEntityValid(entityID)) {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                m_pendingDestroy.push_back(entityID);
-            }
         }
     }
 
