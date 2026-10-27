@@ -527,7 +527,7 @@ jobs:
           retention-days: 1
 
   # =====================================================================
-  # WINDOWS PLUGINS ? short BUILD_DIR under C:\ to avoid MAX_PATH
+  # WINDOWS PLUGINS - short BUILD_DIR under C:\ to avoid MAX_PATH
   # =====================================================================
   plugin-windows:
     needs: core-windows
@@ -632,10 +632,6 @@ jobs:
           echo "$binPath" >> $env:GITHUB_PATH
           echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
 
-      # Default VS 2022 generator (matches build.bat). BUILD_DIR is a short
-      # path under C:\ because the vulkan-shaders-gen ExternalProject does a
-      # try_compile whose .tlog path blows past the 260-char MAX_PATH limit
-      # when the build tree lives under D:\a\AniStudio\AniStudio\build\... .
       - name: Build Plugin
         shell: bash
         run: |
@@ -715,4 +711,167 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 
+          fetch-depth: 0
+
+      - name: Compute release tag
+        id: tag
+        run: |
+          set -euo pipefail
+          SHORT="$(git rev-parse --short=12 HEAD)"
+          TAG="AniStudio-${SHORT}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing as $TAG"
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: false
+          # Pull only the artifacts we release; BuildEnv-* are internal.
+          pattern: >-
+            Core-*
+            Plugin-*
+            CudaRuntime-*
+
+      - name: Flatten artifacts into dist/
+        run: |
+          set -euo pipefail
+          find dist -mindepth 2 -type f -exec mv -f {} dist/ \;
+          find dist -mindepth 1 -type d -empty -delete
+          echo "=== dist contents ==="
+          ls -la dist
+
+      - name: Build merged self-contained bundles
+        run: |
+          set -euo pipefail
+          cd dist
+
+          # ----- helpers -----
+          have() { [ -e "$1" ]; }
+
+          # Extract a plugin .so/.dll out of its staging archive.
+          # $1 = archive, $2 = backend, $3 = .so|.dll, $4 = output dir (plugins/)
+          unpack_plugin() {
+            local archive="$1" backend="$2" ext="$3" out="$4"
+            local tmp; tmp="$(mktemp -d)"
+            case "$archive" in
+              *.zip) 7z x -y -o"$tmp" "$archive" > /dev/null ;;
+              *.tar.gz) tar -xzf "$archive" -C "$tmp" ;;
+            esac
+            local f
+            f="$(find "$tmp" -type f -name "AniStudio-SDCPP_${backend}.${ext}" | head -n1)"
+            if [ -z "$f" ]; then echo "::error::no plugin ${backend} in $archive"; return 1; fi
+            cp "$f" "$out/AniStudio-SDCPP_${backend}.${ext}"
+            rm -rf "$tmp"
+          }
+
+          # ----- LINUX bundles -----
+          if have AniStudio-Linux-x64.tar.gz; then
+            for BACKEND in CPU VULKAN CUDA HIP SYCL; do
+              ARCH="AniStudio-SDCPP_${BACKEND}-linux-x64.tar.gz"
+              if ! have "$ARCH"; then
+                echo "::notice::Skipping Linux ${BACKEND} bundle (plugin artifact missing)"
+                continue
+              fi
+              WORK="$(mktemp -d)"
+              tar -xzf AniStudio-Linux-x64.tar.gz -C "$WORK"
+              mkdir -p "$WORK/plugins"
+              unpack_plugin "$ARCH" "$BACKEND" so "$WORK/plugins"
+              if [ "$BACKEND" != "CPU" ] && have AniStudio-SDCPP_CPU-linux-x64.tar.gz; then
+                unpack_plugin AniStudio-SDCPP_CPU-linux-x64.tar.gz CPU so "$WORK/plugins"
+              fi
+              OUT="AniStudio-Bundle-Linux-x64-${BACKEND}.tar.gz"
+              tar -czf "$OUT" -C "$WORK" .
+              rm -rf "$WORK"
+              echo "built $OUT"
+            done
+          else
+            echo "::notice::Linux core missing; skipping Linux bundles"
+          fi
+
+          # ----- WINDOWS bundles -----
+          if have AniStudio-Windows-x64.zip; then
+            for BACKEND in CPU VULKAN CUDA HIP; do
+              ARCH="AniStudio-SDCPP_${BACKEND}-windows-x64.zip"
+              if ! have "$ARCH"; then
+                echo "::notice::Skipping Windows ${BACKEND} bundle (plugin artifact missing)"
+                continue
+              fi
+              WORK="$(mktemp -d)"
+              7z x -y -o"$WORK" AniStudio-Windows-x64.zip > /dev/null
+              mkdir -p "$WORK/plugins"
+              unpack_plugin "$ARCH" "$BACKEND" dll "$WORK/plugins"
+              if [ "$BACKEND" != "CPU" ] && have AniStudio-SDCPP_CPU-windows-x64.zip; then
+                unpack_plugin AniStudio-SDCPP_CPU-windows-x64.zip CPU dll "$WORK/plugins"
+              fi
+              if [ "$BACKEND" = "CUDA" ] && have cudart-AniStudio-win-cu12-x64.zip; then
+                # CUDA runtime DLLs go next to the exe.
+                7z x -y -o"$WORK" cudart-AniStudio-win-cu12-x64.zip > /dev/null
+              fi
+              OUT="AniStudio-Bundle-Windows-x64-${BACKEND}.zip"
+              ( cd "$WORK" && 7z a -tzip "$(pwd)/../${OUT}" . > /dev/null )
+              rm -rf "$WORK"
+              echo "built $OUT"
+            done
+          else
+            echo "::notice::Windows core missing; skipping Windows bundles"
+          fi
+
+          echo "=== final dist ==="
+          ls -la
+
+      - name: Enforce required plugins unless partial allowed
+        run: |
+          set -euo pipefail
+          cd dist
+          REQUIRED=(
+            AniStudio-SDCPP_CPU-linux-x64.tar.gz
+            AniStudio-SDCPP_VULKAN-linux-x64.tar.gz
+            AniStudio-SDCPP_CUDA-linux-x64.tar.gz
+            AniStudio-SDCPP_CPU-windows-x64.zip
+            AniStudio-SDCPP_VULKAN-windows-x64.zip
+            AniStudio-SDCPP_CUDA-windows-x64.zip
+          )
+          MISSING=0
+          for r in "${REQUIRED[@]}"; do
+            [ -e "$r" ] || { echo "::error::required artifact missing: $r"; MISSING=1; }
+          done
+          if [ "$MISSING" -eq 1 ]; then
+            if [ "${{ inputs.allow_partial_release }}" = "true" ]; then
+              echo "::warning::allow_partial_release=true — publishing despite missing required plugins"
+            else
+              echo "::error::Required CPU/VULKAN/CUDA plugin missing. Set allow_partial_release=true to publish anyway."
+              exit 1
+            fi
+          fi
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          files: |
+            dist/AniStudio-Linux-x64.tar.gz
+            dist/AniStudio-SDCPP_CPU-linux-x64.tar.gz
+            dist/AniStudio-SDCPP_VULKAN-linux-x64.tar.gz
+            dist/AniStudio-SDCPP_CUDA-linux-x64.tar.gz
+            dist/AniStudio-SDCPP_HIP-linux-x64.tar.gz
+            dist/AniStudio-SDCPP_SYCL-linux-x64.tar.gz
+            dist/AniStudio-Windows-x64.zip
+            dist/AniStudio-SDCPP_CPU-windows-x64.zip
+            dist/AniStudio-SDCPP_VULKAN-windows-x64.zip
+            dist/AniStudio-SDCPP_CUDA-windows-x64.zip
+            dist/AniStudio-SDCPP_HIP-windows-x64.zip
+            dist/cudart-AniStudio-win-cu12-x64.zip
+            dist/AniStudio-Bundle-Linux-x64-CPU.tar.gz
+            dist/AniStudio-Bundle-Linux-x64-VULKAN.tar.gz
+            dist/AniStudio-Bundle-Linux-x64-CUDA.tar.gz
+            dist/AniStudio-Bundle-Linux-x64-HIP.tar.gz
+            dist/AniStudio-Bundle-Linux-x64-SYCL.tar.gz
+            dist/AniStudio-Bundle-Windows-x64-CPU.zip
+            dist/AniStudio-Bundle-Windows-x64-VULKAN.zip
+            dist/AniStudio-Bundle-Windows-x64-CUDA.zip
+            dist/AniStudio-Bundle-Windows-x64-HIP.zip
