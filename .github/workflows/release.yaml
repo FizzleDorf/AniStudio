@@ -30,9 +30,48 @@ env:
 
 jobs:
   # =====================================================================
+  # PREPARE - compute tag once, create the release
+  # =====================================================================
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Compute tag
+        id: tag
+        run: |
+          set -euo pipefail
+          SHORT="$(git rev-parse --short=12 HEAD)"
+          TAG="AniStudio-${SHORT}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing as $TAG"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; will upload to it."
+          else
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG" \
+              --notes "Automated release for ${GITHUB_SHA}"
+          fi
+
+  # =====================================================================
   # LINUX CORE
   # =====================================================================
   core-linux:
+    needs: prepare
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -133,29 +172,18 @@ jobs:
           cp -f build/README.md build/LICENSE-*.txt pkg-linux-core/ 2>/dev/null || true
           tar -czf AniStudio-Linux-x64.tar.gz -C pkg-linux-core .
 
-          mkdir -p build/bin
-          tar -czf build-env-linux.tar.gz build/lib build/bin
-
-      - name: Upload Core
-        uses: actions/upload-artifact@v4
-        with:
-          name: Core-Linux
-          path: AniStudio-Linux-x64.tar.gz
-          if-no-files-found: error
-
-      - name: Upload BuildEnv
-        uses: actions/upload-artifact@v4
-        with:
-          name: BuildEnv-Linux
-          path: build-env-linux.tar.gz
-          if-no-files-found: error
-          retention-days: 1
+      - name: Upload Core to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.prepare.outputs.tag }}" AniStudio-Linux-x64.tar.gz --clobber
 
   # =====================================================================
   # LINUX PLUGINS
   # =====================================================================
   plugin-linux:
-    needs: core-linux
+    needs: [prepare, core-linux]
     runs-on: ubuntu-24.04
     continue-on-error: ${{ matrix.backend == 'HIP' }}
     strategy:
@@ -224,15 +252,6 @@ jobs:
           path: ~/.conan2
           key: conan-Linux-v1
 
-      - name: Download BuildEnv
-        uses: actions/download-artifact@v4
-        with:
-          name: BuildEnv-Linux
-          path: .
-
-      - name: Extract BuildEnv
-        run: tar -xzf build-env-linux.tar.gz
-
       - name: Setup Python venv & Conan
         run: |
           set -euo pipefail
@@ -285,18 +304,19 @@ jobs:
           cp "build/plugins/$NAME/staging/$NAME.so" "pkg/$NAME/staging/"
           tar -czf "$NAME-linux-x64.tar.gz" -C pkg .
 
-      - name: Upload Plugin
-        uses: actions/upload-artifact@v4
-        with:
-          name: Plugin-Linux-${{ matrix.backend }}
-          path: AniStudio-SDCPP_${{ matrix.backend }}-linux-x64.tar.gz
-          if-no-files-found: error
+      - name: Upload Plugin to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.prepare.outputs.tag }}" \
+            "AniStudio-SDCPP_${{ matrix.backend }}-linux-x64.tar.gz" --clobber
 
   # =====================================================================
   # LINUX SYCL
   # =====================================================================
   plugin-linux-sycl:
-    needs: core-linux
+    needs: [prepare, core-linux]
     runs-on: ubuntu-24.04
     continue-on-error: true
     steps:
@@ -315,15 +335,6 @@ jobs:
         with:
           path: ~/.conan2
           key: conan-Linux-v1
-
-      - name: Download BuildEnv
-        uses: actions/download-artifact@v4
-        with:
-          name: BuildEnv-Linux
-          path: .
-
-      - name: Extract BuildEnv
-        run: tar -xzf build-env-linux.tar.gz
 
       - name: Write container build script
         run: |
@@ -379,17 +390,19 @@ jobs:
           cp "build/plugins/$NAME/staging/$NAME.so" "pkg/$NAME/staging/"
           tar -czf "$NAME-linux-x64.tar.gz" -C pkg .
 
-      - name: Upload Plugin
-        uses: actions/upload-artifact@v4
-        with:
-          name: Plugin-Linux-SYCL
-          path: AniStudio-SDCPP_SYCL-linux-x64.tar.gz
-          if-no-files-found: error
+      - name: Upload Plugin to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.prepare.outputs.tag }}" \
+            "AniStudio-SDCPP_SYCL-linux-x64.tar.gz" --clobber
 
   # =====================================================================
   # WINDOWS CORE
   # =====================================================================
   core-windows:
+    needs: prepare
     runs-on: windows-2022
     steps:
       - name: Checkout
@@ -508,29 +521,19 @@ jobs:
 
           (cd pkg-win-core && 7z a -tzip ../AniStudio-Windows-x64.zip . > /dev/null)
 
-          mkdir -p build/bin
-          tar -czf build-env-win.tar.gz build/lib build/bin
-
-      - name: Upload Core
-        uses: actions/upload-artifact@v4
-        with:
-          name: Core-Windows
-          path: AniStudio-Windows-x64.zip
-          if-no-files-found: error
-
-      - name: Upload BuildEnv
-        uses: actions/upload-artifact@v4
-        with:
-          name: BuildEnv-Windows
-          path: build-env-win.tar.gz
-          if-no-files-found: error
-          retention-days: 1
+      - name: Upload Core to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.prepare.outputs.tag }}" AniStudio-Windows-x64.zip --clobber
 
   # =====================================================================
-  # WINDOWS PLUGINS - short BUILD_DIR under C:\ to avoid MAX_PATH
+  # WINDOWS PLUGINS
   # =====================================================================
   plugin-windows:
-    needs: core-windows
+    needs: [prepare, core-windows]
     runs-on: windows-2022
     timeout-minutes: 340
     continue-on-error: ${{ matrix.backend == 'HIP' }}
@@ -560,16 +563,6 @@ jobs:
         with:
           path: ~/.conan2
           key: conan-Windows-v1
-
-      - name: Download BuildEnv
-        uses: actions/download-artifact@v4
-        with:
-          name: BuildEnv-Windows
-          path: .
-
-      - name: Extract BuildEnv
-        shell: bash
-        run: tar -xzf build-env-win.tar.gz
 
       - name: Setup Python venv & Conan
         shell: bash
@@ -672,12 +665,14 @@ jobs:
           cp "build/plugins/$NAME/staging/$NAME.dll" "pkg/$NAME/staging/"
           (cd pkg && 7z a -tzip "../$NAME-windows-x64.zip" . > /dev/null)
 
-      - name: Upload Plugin
-        uses: actions/upload-artifact@v4
-        with:
-          name: Plugin-Windows-${{ matrix.backend }}
-          path: AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip
-          if-no-files-found: error
+      - name: Upload Plugin to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.prepare.outputs.tag }}" \
+            "AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip" --clobber
 
       - name: Collect CUDA runtime DLLs
         if: matrix.backend == 'CUDA'
@@ -691,66 +686,39 @@ jobs:
           done
           (cd cudart && 7z a -tzip ../cudart-AniStudio-win-cu12-x64.zip . > /dev/null)
 
-      - name: Upload CUDA runtime
+      - name: Upload CUDA runtime to release
         if: matrix.backend == 'CUDA'
-        uses: actions/upload-artifact@v4
-        with:
-          name: CudaRuntime-Windows
-          path: cudart-AniStudio-win-cu12-x64.zip
-          if-no-files-found: error
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release upload "${{ needs.prepare.outputs.tag }}" cudart-AniStudio-win-cu12-x64.zip --clobber
 
   # =====================================================================
-  # BUNDLE & RELEASE
+  # BUNDLE - download released files, merge, upload bundles back
   # =====================================================================
   bundle:
-    needs: [core-linux, core-windows, plugin-linux, plugin-linux-sycl, plugin-windows]
+    needs: [prepare, core-linux, core-windows, plugin-linux, plugin-linux-sycl, plugin-windows]
     if: ${{ !cancelled() && needs.core-linux.result == 'success' && needs.core-windows.result == 'success' }}
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Compute release tag
-        id: tag
+      - name: Download released binaries
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          SHORT="$(git rev-parse --short=12 HEAD)"
-          TAG="AniStudio-${SHORT}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Releasing as $TAG"
-
-      - name: Download all release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: false
-          # Pull only the artifacts we release; BuildEnv-* are internal.
-          pattern: >-
-            Core-*
-            Plugin-*
-            CudaRuntime-*
-
-      - name: Flatten artifacts into dist/
-        run: |
-          set -euo pipefail
-          find dist -mindepth 2 -type f -exec mv -f {} dist/ \;
-          find dist -mindepth 1 -type d -empty -delete
-          echo "=== dist contents ==="
+          mkdir -p dist
+          gh release download "${{ needs.prepare.outputs.tag }}" --dir dist --clobber
+          echo "=== downloaded ==="
           ls -la dist
 
       - name: Build merged self-contained bundles
         run: |
           set -euo pipefail
           cd dist
-
-          # ----- helpers -----
           have() { [ -e "$1" ]; }
 
-          # Extract a plugin .so/.dll out of its staging archive.
-          # $1 = archive, $2 = backend, $3 = .so|.dll, $4 = output dir (plugins/)
           unpack_plugin() {
             local archive="$1" backend="$2" ext="$3" out="$4"
             local tmp; tmp="$(mktemp -d)"
@@ -760,7 +728,7 @@ jobs:
             esac
             local f
             f="$(find "$tmp" -type f -name "AniStudio-SDCPP_${backend}.${ext}" | head -n1)"
-            if [ -z "$f" ]; then echo "::error::no plugin ${backend} in $archive"; return 1; fi
+            if [ -z "$f" ]; then echo "::error::no plugin ${backend} in $archive"; rm -rf "$tmp"; return 1; fi
             cp "$f" "$out/AniStudio-SDCPP_${backend}.${ext}"
             rm -rf "$tmp"
           }
@@ -770,7 +738,7 @@ jobs:
             for BACKEND in CPU VULKAN CUDA HIP SYCL; do
               ARCH="AniStudio-SDCPP_${BACKEND}-linux-x64.tar.gz"
               if ! have "$ARCH"; then
-                echo "::notice::Skipping Linux ${BACKEND} bundle (plugin artifact missing)"
+                echo "::notice::Skipping Linux ${BACKEND} bundle (plugin missing)"
                 continue
               fi
               WORK="$(mktemp -d)"
@@ -794,7 +762,7 @@ jobs:
             for BACKEND in CPU VULKAN CUDA HIP; do
               ARCH="AniStudio-SDCPP_${BACKEND}-windows-x64.zip"
               if ! have "$ARCH"; then
-                echo "::notice::Skipping Windows ${BACKEND} bundle (plugin artifact missing)"
+                echo "::notice::Skipping Windows ${BACKEND} bundle (plugin missing)"
                 continue
               fi
               WORK="$(mktemp -d)"
@@ -805,7 +773,6 @@ jobs:
                 unpack_plugin AniStudio-SDCPP_CPU-windows-x64.zip CPU dll "$WORK/plugins"
               fi
               if [ "$BACKEND" = "CUDA" ] && have cudart-AniStudio-win-cu12-x64.zip; then
-                # CUDA runtime DLLs go next to the exe.
                 7z x -y -o"$WORK" cudart-AniStudio-win-cu12-x64.zip > /dev/null
               fi
               OUT="AniStudio-Bundle-Windows-x64-${BACKEND}.zip"
@@ -816,9 +783,6 @@ jobs:
           else
             echo "::notice::Windows core missing; skipping Windows bundles"
           fi
-
-          echo "=== final dist ==="
-          ls -la
 
       - name: Enforce required plugins unless partial allowed
         run: |
@@ -845,33 +809,15 @@ jobs:
             fi
           fi
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: ${{ steps.tag.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          fail_on_unmatched_files: false
-          generate_release_notes: true
-          files: |
-            dist/AniStudio-Linux-x64.tar.gz
-            dist/AniStudio-SDCPP_CPU-linux-x64.tar.gz
-            dist/AniStudio-SDCPP_VULKAN-linux-x64.tar.gz
-            dist/AniStudio-SDCPP_CUDA-linux-x64.tar.gz
-            dist/AniStudio-SDCPP_HIP-linux-x64.tar.gz
-            dist/AniStudio-SDCPP_SYCL-linux-x64.tar.gz
-            dist/AniStudio-Windows-x64.zip
-            dist/AniStudio-SDCPP_CPU-windows-x64.zip
-            dist/AniStudio-SDCPP_VULKAN-windows-x64.zip
-            dist/AniStudio-SDCPP_CUDA-windows-x64.zip
-            dist/AniStudio-SDCPP_HIP-windows-x64.zip
-            dist/cudart-AniStudio-win-cu12-x64.zip
-            dist/AniStudio-Bundle-Linux-x64-CPU.tar.gz
-            dist/AniStudio-Bundle-Linux-x64-VULKAN.tar.gz
-            dist/AniStudio-Bundle-Linux-x64-CUDA.tar.gz
-            dist/AniStudio-Bundle-Linux-x64-HIP.tar.gz
-            dist/AniStudio-Bundle-Linux-x64-SYCL.tar.gz
-            dist/AniStudio-Bundle-Windows-x64-CPU.zip
-            dist/AniStudio-Bundle-Windows-x64-VULKAN.zip
-            dist/AniStudio-Bundle-Windows-x64-CUDA.zip
-            dist/AniStudio-Bundle-Windows-x64-HIP.zip
+      - name: Upload bundles to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          FILES=(dist/AniStudio-Bundle-*)
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "::warning::No bundles were built; nothing to upload."
+            exit 0
+          fi
+          gh release upload "${{ needs.prepare.outputs.tag }}" "${FILES[@]}" --clobber
